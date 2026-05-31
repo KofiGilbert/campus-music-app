@@ -244,6 +244,32 @@ pnpm --filter @workspace/campus-music-mobile run web
 
 ---
 
+## Branch protection (GitHub)
+
+`main` must stay deployable. All changes land via pull request — see
+[CONTRIBUTING.md](CONTRIBUTING.md) for the branch → PR → merge workflow. A
+maintainer should configure these rules once on GitHub:
+
+**Settings → Branches → Branch protection rules → Add rule**, branch name
+pattern `main`, then enable:
+
+- ☑ **Require a pull request before merging** — blocks direct pushes to `main`.
+  - ☑ Require approvals: **1** (raise as the team grows).
+  - ☑ Dismiss stale approvals when new commits are pushed.
+- ☑ **Require status checks to pass before merging** (select the typecheck/CI
+  check once CI is set up).
+  - ☑ Require branches to be up to date before merging.
+- ☑ **Require conversation resolution before merging.**
+- ☑ **Do not allow bypassing the above settings** (applies rules to admins too).
+- ☑ (Recommended) **Require linear history** — pairs with "Squash and merge".
+
+Repo-wide, also set **Settings → General → Pull Requests**: enable *Squash
+merging*, disable merge commits/rebase if you want a linear history, and enable
+*Automatically delete head branches*.
+
+> CLI alternative (needs `gh` + admin): `gh api -X PUT
+> repos/<owner>/<repo>/branches/main/protection ...` with the equivalent JSON.
+
 ## Notes for the demo
 
 - **Working end-to-end** (real API + DB): auth/onboarding, home & discover feeds,
