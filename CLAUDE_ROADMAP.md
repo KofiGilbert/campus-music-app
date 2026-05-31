@@ -26,7 +26,13 @@ Campus Music is a Spotify × TikTok/Instagram hybrid for college campus artists.
 For each phase:
 
 1. Read the matching section of `DEVIN_ROADMAP.md` (Phase 0, Phase 1, etc.).
-2. Branch from `main`: `claude/phase-<N>-<short-name>` (e.g. `claude/phase-0-foundations`).
+2. Branch from `main` using the repo's [CONTRIBUTING.md §40-48](CONTRIBUTING.md) convention — pick the prefix that matches what the phase actually does:
+   - `chore/` for tooling / refactor / infra-only phases (Phase 0, Phase 11 hardening).
+   - `feature/` for new user-facing functionality (Phases 1–10.5, 12–17).
+   - `fix/` for bug-fix-only follow-ups.
+   - `docs/` for documentation-only PRs.
+
+   Append `phase-<N>-<short-name>` after the prefix so the branch is self-describing. Example: Phase 0 → `chore/phase-0-foundations`. Phase 1 → `feature/phase-1-real-auth`.
 3. Implement the phase. Land each logical chunk in its own commit.
 4. Open a PR titled `Phase <N>: <short summary>`. Use the repo's PR template.
 5. Wait for Devin's review **and** green CI.
@@ -136,7 +142,8 @@ For each phase:
 ### Git
 
 - Commits: imperative present tense, max 72-char subject. Body explains the *why*, not the *what*.
-- Branch naming: `claude/phase-<N>-<short-name>`, `claude/fix/<short-name>`, `claude/chore/<short-name>`.
+- Branch naming: per CONTRIBUTING.md §40-48 — `feature/`, `fix/`, `chore/`, or `docs/` prefix, then a short kebab-case description (include `phase-<N>-...` for roadmap phases so the branch is self-describing).
+- AI-assisted commits include the Co-Authored-By trailer required by CONTRIBUTING.md §97-103: `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`.
 - PR descriptions reference the roadmap section being delivered.
 - **Never force-push** a branch that has been reviewed.
 
@@ -236,7 +243,7 @@ For full details on each phase, read the corresponding section of `DEVIN_ROADMAP
 
 ## 9. Phase 0 starting checklist (your first PR)
 
-Open branch `claude/phase-0-foundations` immediately after this docs PR merges. Deliverables (from `DEVIN_ROADMAP.md` Phase 0 + this section, exhaustive):
+Open branch `chore/phase-0-foundations` immediately after this docs PR merges (Phase 0 is tooling + infra + refactor — no new user-facing functionality, so the `chore/` prefix is correct per CONTRIBUTING.md). Deliverables (from `DEVIN_ROADMAP.md` Phase 0 + this section, exhaustive):
 
 - **ESLint + Prettier** config across the monorepo: `typescript-eslint` + `eslint-plugin-react` + `eslint-plugin-react-native` + `eslint-plugin-drizzle`. Apply zero-warning policy.
 - **Husky** + **lint-staged** pre-commit hook running `eslint --fix` + `prettier --write` + `tsc --noEmit` on staged files.
@@ -247,14 +254,14 @@ Open branch `claude/phase-0-foundations` immediately after this docs PR merges. 
 - **Remove `drizzle-kit push`** from the post-merge hook and from production. Document the new workflow in `lib/db/README.md`.
 - **Fly.io setup**: organization, app `campus-music-api`, `fly.toml` with regions `iad` + `lax`, secrets configured via `flyctl secrets set`. Manual `fly deploy` verified — health check returns 200, DB connectivity verified.
 - **Cloudflare setup**: account, R2 bucket `campus-music-audio`, API token scoped to that bucket, connectivity test from `api-server` (`HEAD` on a test object).
-- **Mobile auth gate**: rewrite `app/index.tsx` so unauthenticated users redirect to `/auth/sign-in` instead of straight into the tabs.
+- **Mobile auth gate**: rewrite `app/index.tsx` so unauthenticated users redirect to `/onboarding/welcome` (the existing entry point — see `artifacts/campus-music-mobile/app/onboarding/welcome.tsx`) instead of straight into the tabs.
 - **Delete the broken `POST /feed/:id/like`** endpoint — it's a no-op. Will be properly replaced by post-likes in Phase 3.
 - **`is_admin` flag** added to `users`, included in JWT claims. CLI script `pnpm admin:promote <email>` that flips the flag (with confirmation prompt).
 - **Rate limiting** on `/auth/*` endpoints via `express-rate-limit` (Redis-backed if Redis is already in the stack; in-memory fine for now).
 - **Pre-commit hook** installed via Husky; verify it fires on a sample commit.
 - **Open a PR** titled `Phase 0: Foundations`. Use the repo's PR template. Wait for Devin's review + green CI. Address review in new commits. Do not force-push.
 
-When this PR merges, immediately open `claude/phase-1-real-auth` and start Phase 1.
+When this PR merges, immediately open `feature/phase-1-real-auth` and start Phase 1.
 
 ---
 
