@@ -329,9 +329,11 @@ function PostCard({ post }: { post: Post }) {
 
   const handlePlay = () => {
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    // Play inline via PlayerContext — the mini player appears at the bottom and
+    // the user stays on the feed. Never navigate to /music-feed (that screen is
+    // the separate TikTok-style discovery feed, not where feed posts should play).
     const match = tracks.find((t) => t.title === post.trackTitle);
     if (match) playTrack(match, tracks);
-    router.push("/music-feed");
   };
 
   const openComments = () => {
