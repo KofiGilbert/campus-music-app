@@ -1,8 +1,9 @@
 import { Ionicons } from "@/components/icons";
 import * as Haptics from "expo-haptics";
-import React from "react";
+import React, { useContext } from "react";
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { BottomTabBarHeightContext } from "@react-navigation/bottom-tabs";
 import { useColors } from "@/hooks/useColors";
 import { TrackCover } from "@/components/TrackCover";
 import { EqualizerBars } from "@/components/EqualizerBars";
@@ -22,6 +23,10 @@ interface NowPlayingBarProps {
 export function NowPlayingBar({ track, isPlaying, isLoading = false, onToggle, onNext, onPress }: NowPlayingBarProps) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  // Exact height of the bottom tab bar (already includes the bottom safe-area
+  // inset). Provided by the tab navigator to its descendant screens; `undefined`
+  // on stack screens that have no tab bar.
+  const tabBarHeight = useContext(BottomTabBarHeightContext);
   const { audioLevel, frequencyBands, progress, duration } = usePlayer();
 
   if (!track) return null;
@@ -33,8 +38,11 @@ export function NowPlayingBar({ track, isPlaying, isLoading = false, onToggle, o
     onToggle();
   };
 
-  const TAB_BAR_HEIGHT = Platform.OS === "ios" ? 49 : 56;
-  const bottomPad = Platform.OS === "web" ? 84 : insets.bottom + TAB_BAR_HEIGHT;
+  // Sit flush on top of the bottom nav: offset the bar by the actual tab-bar
+  // height (which already accounts for the safe-area inset). On screens without
+  // a tab bar, fall back to just the safe-area inset. Hardcoding the tab-bar
+  // height previously left a gap because the guess didn't match the real height.
+  const bottomPad = Platform.OS === "web" ? 84 : tabBarHeight ?? insets.bottom;
 
   return (
     <Pressable
