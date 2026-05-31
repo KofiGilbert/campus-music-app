@@ -139,6 +139,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const analyzerRef = useRef<FrequencyAnalyzer | null>(null);
 
   const soundRef = useRef<Audio.Sound | null>(null);
+  // Monotonic token for track loads. Each playTrackInternal call claims a token;
+  // if a newer load starts before this one finishes creating its sound, the
+  // older sound is discarded (unloaded) instead of being left playing orphaned.
+  const loadTokenRef = useRef(0);
 
   // Stable refs to avoid stale closures in playback status callbacks
   const rawTracksRef = useRef<Track[]>([]);
@@ -684,6 +688,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, [getTrackById]);
 
   const playTrackInternal = useCallback(async (track: Track, snapshotQueue?: boolean) => {
+    // Claim this load. Any sound created by an older, still-in-flight call to
+    // this function will be discarded once a newer call has claimed a token,
+    // preventing two sounds from playing at once (which made pause unable to
+    // stop the orphaned one).
+    const loadToken = ++loadTokenRef.current;
     try {
       if (soundRef.current) {
         try { soundRef.current.setOnAudioSampleReceived(null); } catch {}
@@ -737,6 +746,16 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         { uri: audioUrl },
         { shouldPlay: shouldPlayImmediately, progressUpdateIntervalMillis: 500 }
       );
+
+      // If a newer load started while this sound was being created, this sound is
+      // stale: unload it so it can't keep playing in the background (an orphaned,
+      // unpausable instance), and bail before wiring callbacks or touching state.
+      if (loadTokenRef.current !== loadToken) {
+        try { sound.setOnAudioSampleReceived(null); } catch {}
+        await sound.unloadAsync().catch(() => {});
+        return;
+      }
+
       soundRef.current = sound;
 
       // Wire up real-time PCM audio sample callback for equalizer visualization.
