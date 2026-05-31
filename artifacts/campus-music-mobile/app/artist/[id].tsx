@@ -87,7 +87,7 @@ export default function ArtistProfileScreen() {
     staleTime: 60 * 1000,
   });
 
-  const tracks: Track[] = (rawTracks ?? []).map((t) => ({
+  const tracks: Track[] = (Array.isArray(rawTracks) ? rawTracks : []).map((t) => ({
     ...t,
     audioUrl: t.audioUrl ?? null,
     coverUrl: t.coverUrl ?? null,

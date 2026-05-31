@@ -52,7 +52,7 @@ export default function CampusesScreen() {
   }));
 
   if (selectedCampus) {
-    const campusTracks = (allTracks ?? []).filter(
+    const campusTracks = (Array.isArray(allTracks) ? allTracks : []).filter(
       (t) => t.university?.toLowerCase() === selectedCampus.toLowerCase()
     ).slice(0, 10);
     const campusArtists = (allArtists ?? []).filter(

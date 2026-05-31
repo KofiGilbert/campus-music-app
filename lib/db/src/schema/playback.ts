@@ -1,6 +1,7 @@
-import { real, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { real, text, timestamp } from "drizzle-orm/pg-core";
+import { campusMusic } from "./namespace";
 
-export const userPlayback = pgTable("user_playback", {
+export const userPlayback = campusMusic.table("user_playback", {
   userId: text("user_id").primaryKey().notNull(),
   trackId: text("track_id").notNull(),
   position: real("position").notNull().default(0),

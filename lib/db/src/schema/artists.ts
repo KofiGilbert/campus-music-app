@@ -1,8 +1,9 @@
-import { pgTable, text, varchar } from "drizzle-orm/pg-core";
+import { text, varchar } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { campusMusic } from "./namespace";
 
-export const artists = pgTable("artists", {
+export const artists = campusMusic.table("artists", {
   id: varchar("id").primaryKey(),
   name: text("name").notNull(),
   genre: text("genre").notNull(),

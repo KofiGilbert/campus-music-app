@@ -340,8 +340,12 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     log("Loaded library IDs from server:", ids.size);
   }, [serverLibraryIds, isAuthenticated]);
 
-  // Map API tracks to the Track type used by components
-  const apiTracks: Track[] = (apiTracksRaw ?? []).map((t) => ({
+  // Map API tracks to the Track type used by components.
+  // The endpoint is typed as Track[], but a misbehaving API can return a non-array
+  // (e.g. an object wrapper or error payload), so guard with Array.isArray rather
+  // than `?? []` — the latter only catches null/undefined and would still crash on .map.
+  const apiTracksArray = Array.isArray(apiTracksRaw) ? apiTracksRaw : [];
+  const apiTracks: Track[] = apiTracksArray.map((t) => ({
     id: t.id,
     title: t.title,
     artist: t.artist,

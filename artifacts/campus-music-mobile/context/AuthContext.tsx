@@ -4,16 +4,15 @@ import { setAuthTokenGetter, setBaseUrl, getMe } from "@workspace/api-client-rea
 import { ApiError } from "@workspace/api-client-react";
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { Platform } from "react-native";
+import { resolveApiBaseUrl } from "@/constants/config";
 
 const AUTH_KEY = "campus_music_auth";
 const TOKEN_KEY = "campus_music_token";
 
-if (Platform.OS !== "web") {
-  const domain = process.env.EXPO_PUBLIC_DOMAIN;
-  if (domain) {
-    setBaseUrl(`https://${domain}`);
-  }
-}
+// Configure where API requests are sent. Handles both local development
+// (EXPO_PUBLIC_API_URL, web + native) and the Replit preview (EXPO_PUBLIC_DOMAIN,
+// native). When null, requests use same-origin relative paths. See constants/config.ts.
+setBaseUrl(resolveApiBaseUrl());
 
 async function secureSetItem(key: string, value: string): Promise<void> {
   if (Platform.OS === "web") {

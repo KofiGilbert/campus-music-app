@@ -1,6 +1,7 @@
-import { pgTable, text, primaryKey, timestamp } from "drizzle-orm/pg-core";
+import { text, primaryKey, timestamp } from "drizzle-orm/pg-core";
+import { campusMusic } from "./namespace";
 
-export const artistFollows = pgTable("artist_follows", {
+export const artistFollows = campusMusic.table("artist_follows", {
   userId: text("user_id").notNull(),
   artistId: text("artist_id").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

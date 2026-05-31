@@ -196,7 +196,7 @@ export default function ProfileScreen() {
     retry: 1,
   });
 
-  const myTracks: Track[] = (myTracksRaw ?? []).map((t) => ({
+  const myTracks: Track[] = (Array.isArray(myTracksRaw) ? myTracksRaw : []).map((t) => ({
     id: t.id,
     title: t.title,
     artist: t.artist,

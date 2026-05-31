@@ -1,9 +1,10 @@
 import { sql } from "drizzle-orm";
-import { integer, pgTable, text, varchar } from "drizzle-orm/pg-core";
+import { integer, text, varchar } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { campusMusic } from "./namespace";
 
-export const tracks = pgTable("tracks", {
+export const tracks = campusMusic.table("tracks", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   title: text("title").notNull(),
   artist: text("artist").notNull(),
