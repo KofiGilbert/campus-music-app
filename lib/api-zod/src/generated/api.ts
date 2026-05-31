@@ -388,23 +388,6 @@ export const GetFeedResponseItem = zod.object({
 export const GetFeedResponse = zod.array(GetFeedResponseItem);
 
 /**
- * @summary Like or unlike a feed item
- */
-export const LikeFeedItemParams = zod.object({
-  id: zod.coerce.string(),
-});
-
-export const LikeFeedItemBody = zod.object({
-  liked: zod.boolean().optional(),
-});
-
-export const LikeFeedItemResponse = zod.object({
-  itemId: zod.string(),
-  likes: zod.number(),
-  liked: zod.boolean(),
-});
-
-/**
  * @summary Search tracks and artists
  */
 export const SearchQueryParams = zod.object({
