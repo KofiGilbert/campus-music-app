@@ -1,0 +1,27 @@
+kind = "mobile"
+previewPath = "/campus-music-mobile/"
+title = "Campus Music Mobile"
+version = "1.0.0"
+id = "artifacts/campus-music-mobile"
+router = "expo-domain"
+
+[[integratedSkills]]
+name = "expo"
+version = "1.0.0"
+
+[[services]]
+ensurePreviewReachable = "/status"
+name = "expo"
+paths = [ "/campus-music-mobile/" ]
+localPort = 19212
+
+[services.development]
+run = "pnpm --filter @workspace/campus-music-mobile run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/campus-music-mobile", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/campus-music-mobile", "run", "serve" ]
+
+[services.env]
+PORT = "19212"
+BASE_PATH = "/campus-music-mobile/"

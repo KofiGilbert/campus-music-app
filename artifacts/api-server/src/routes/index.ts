@@ -1,0 +1,32 @@
+import { Router, type IRouter } from "express";
+import healthRouter from "./health";
+import appRouter from "./routes";
+import authRouter from "./auth";
+import otpRouter from "./otp";
+import tracksRouter from "./tracks";
+import artistsRouter from "./artists";
+import feedRouter from "./feed";
+import searchRouter from "./search";
+import universitiesRouter from "./universities";
+import connectionsRouter from "./connections";
+import storageRouter from "./storage";
+import playbackRouter from "./playback";
+import usersRouter from "./users";
+
+const router: IRouter = Router();
+
+router.use(healthRouter);
+router.use(authRouter);
+router.use(otpRouter);
+router.use(storageRouter);
+router.use(tracksRouter);
+router.use(artistsRouter);
+router.use(feedRouter);
+router.use(searchRouter);
+router.use(universitiesRouter);
+router.use(connectionsRouter);
+router.use(playbackRouter);
+router.use(usersRouter);
+router.use(appRouter);
+
+export default router;

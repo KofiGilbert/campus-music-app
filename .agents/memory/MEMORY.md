@@ -1,0 +1,4 @@
+- [Mobile splash / auth init hang](mobile-splash-auth-init.md) — splash navigation must be time-boxed; custom-fetch has no timeout, so a hung getMe froze the splash forever.
+- [RN Web list scrolling](rnw-list-scroll.md) — RN Web FlatList/ScrollView needs `style={{ flex: 1 }}` (with flex:1 parent) to scroll; horizontal lists must NOT get it.
+- [Mobile cover/image resolution](mobile-image-resolution.md) — TrackCover thumbSize is a 2x baseline scaled by PixelRatio; under-sized CDN requests caused pixelation.
+- [Expo vector-icon fonts](expo-vector-icon-fonts.md) — Android tofu/"X" icons: web auto-injects icon CSS (can't validate there); native needs capitalized loadAsync keys + expo-font plugin embed.

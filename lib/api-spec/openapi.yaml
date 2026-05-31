@@ -1,0 +1,1649 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: auth
+    description: Authentication operations
+  - name: tracks
+    description: Music track operations
+  - name: artists
+    description: Artist operations
+  - name: feed
+    description: Social feed operations
+  - name: search
+    description: Search operations
+  - name: universities
+    description: University operations
+  - name: connections
+    description: User connection operations
+  - name: users
+    description: Public user profile operations
+  - name: Storage
+    description: Object storage upload and serving endpoints.
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /auth/signup:
+    post:
+      operationId: signup
+      tags: [auth]
+      summary: Register a new user (alias for /auth/register)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterBody"
+      responses:
+        "201":
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Email already in use
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/register:
+    post:
+      operationId: register
+      tags: [auth]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterBody"
+      responses:
+        "201":
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Email already in use
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/otp/send:
+    post:
+      operationId: sendOtp
+      tags: [auth]
+      summary: Send a 6-digit OTP code to an email address
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OtpSendBody"
+      responses:
+        "200":
+          description: OTP sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OtpSendResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/otp/verify:
+    post:
+      operationId: verifyOtp
+      tags: [auth]
+      summary: Verify a 6-digit OTP code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OtpVerifyBody"
+      responses:
+        "200":
+          description: OTP verified
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OtpVerifyResponse"
+        "400":
+          description: Invalid or expired code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login with email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginBody"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Logout
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LogoutResponse"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current authenticated user
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Current user profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateMe
+      tags: [auth]
+      summary: Update the current authenticated user's profile
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProfileBody"
+      responses:
+        "200":
+          description: Updated user profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /storage/uploads/request-url:
+    post:
+      tags: [Storage]
+      operationId: requestUploadUrl
+      summary: Request a presigned URL for file upload
+      description: |
+        Returns a presigned GCS URL for direct upload. The client sends JSON
+        metadata here, then uploads the file directly to the returned URL.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UploadUrlRequest'
+      responses:
+        '200':
+          description: Presigned upload URL generated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadUrlResponse'
+        '400':
+          description: Missing or invalid required fields.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Failed to generate upload URL.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /storage/objects/{objectPath}:
+    get:
+      tags: [Storage]
+      operationId: getStorageObject
+      summary: Serve an object entity from PRIVATE_OBJECT_DIR
+      parameters:
+        - name: objectPath
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Object content streamed with correct Content-Type.
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Object not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /tracks:
+    post:
+      operationId: createTrack
+      tags: [tracks]
+      summary: Upload a new track (artists only)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTrackBody"
+      responses:
+        "201":
+          description: Track created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Track"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Only artists can upload tracks
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      operationId: getTracks
+      tags: [tracks]
+      summary: List all tracks
+      parameters:
+        - in: query
+          name: genre
+          schema:
+            type: string
+          required: false
+          description: Filter by genre
+        - in: query
+          name: limit
+          schema:
+            type: integer
+          required: false
+          description: Max number of results
+        - in: query
+          name: university
+          schema:
+            type: string
+          required: false
+          description: Filter by university
+        - in: query
+          name: artistId
+          schema:
+            type: string
+          required: false
+          description: Filter by artist user ID
+      responses:
+        "200":
+          description: List of tracks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Track"
+
+  /tracks/trending:
+    get:
+      operationId: getTrendingTracks
+      tags: [tracks]
+      summary: Get trending tracks sorted by play count
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+          required: false
+          description: Max number of results (default 10)
+      responses:
+        "200":
+          description: Trending tracks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Track"
+
+  /tracks/most-liked:
+    get:
+      operationId: getMostLikedTracks
+      tags: [tracks]
+      summary: Get tracks sorted by total like count (popularity leaderboard)
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+          required: false
+          description: Max number of results (default 50)
+      responses:
+        "200":
+          description: Most liked tracks sorted by descending like count
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Track"
+
+  /tracks/{id}:
+    get:
+      operationId: getTrackById
+      tags: [tracks]
+      summary: Get a single track by ID
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Track detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Track"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateTrack
+      tags: [tracks]
+      summary: Update a track (owner only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTrackBody"
+      responses:
+        "200":
+          description: Updated track
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Track"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Not the track owner
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteTrack
+      tags: [tracks]
+      summary: Delete a track (owner only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "204":
+          description: Track deleted
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Not the track owner
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /tracks/liked:
+    get:
+      operationId: getLikedTrackIds
+      tags: [tracks]
+      summary: Get liked track IDs for the current user
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Array of liked track IDs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  /tracks/library:
+    get:
+      operationId: getLibraryTrackIds
+      tags: [tracks]
+      summary: Get library (saved) track IDs for the current user
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Array of library track IDs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  /tracks/{id}/like:
+    post:
+      operationId: likeTrack
+      tags: [tracks]
+      summary: Like or unlike a track (persisted per-user when authenticated)
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LikeBody"
+      responses:
+        "200":
+          description: Updated like status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LikeResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /tracks/{id}/play:
+    post:
+      operationId: recordPlay
+      tags: [tracks]
+      summary: Increment the play count for a track
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Updated play count
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlayResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /tracks/{id}/library:
+    post:
+      operationId: saveToLibrary
+      tags: [tracks]
+      summary: Save or unsave a track from the library
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LibraryBody"
+      responses:
+        "200":
+          description: Updated library status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LibraryResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /feed:
+    get:
+      operationId: getFeed
+      tags: [feed]
+      summary: Get social feed (trending tracks sorted by play count)
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+          required: false
+      responses:
+        "200":
+          description: Feed tracks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Track"
+
+  /feed/{id}/like:
+    post:
+      operationId: likeFeedItem
+      tags: [feed]
+      summary: Like or unlike a feed item
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LikeBody"
+      responses:
+        "200":
+          description: Updated like status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeedLikeResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /search:
+    get:
+      operationId: search
+      tags: [search]
+      summary: Search tracks and artists
+      parameters:
+        - in: query
+          name: q
+          schema:
+            type: string
+          required: true
+          description: Search query
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResults"
+
+  /universities:
+    get:
+      operationId: getUniversities
+      tags: [universities]
+      summary: List all known universities
+      responses:
+        "200":
+          description: University list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  /universities/search:
+    get:
+      operationId: searchUniversities
+      tags: [universities]
+      summary: Search universities by name
+      parameters:
+        - in: query
+          name: name
+          schema:
+            type: string
+          required: false
+          description: Name filter (partial match)
+      responses:
+        "200":
+          description: Matching universities
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  /artists:
+    get:
+      operationId: getArtists
+      tags: [artists]
+      summary: List all artists
+      responses:
+        "200":
+          description: List of artists
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Artist"
+
+  /artists/followed:
+    get:
+      operationId: getFollowedArtists
+      tags: [artists]
+      summary: Get artists followed by the current authenticated user
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Artists the user follows
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Artist"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /artists/{id}:
+    get:
+      operationId: getArtistById
+      tags: [artists]
+      summary: Get a single artist by ID
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Artist detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Artist"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateArtist
+      tags: [artists]
+      summary: Update an artist's profile (owner only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateArtistBody"
+      responses:
+        "200":
+          description: Updated artist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Artist"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Not the artist owner
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Artist not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /artists/{id}/follow:
+    post:
+      operationId: followArtist
+      tags: [artists]
+      summary: Follow or unfollow an artist
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FollowBody"
+      responses:
+        "200":
+          description: Updated follow status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FollowResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /users/{id}:
+    get:
+      operationId: getUserById
+      tags: [users]
+      summary: Get a user's public profile including their tracks
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Public user profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicProfile"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /connections/search:
+    get:
+      operationId: searchConnections
+      tags: [connections]
+      summary: Search registered users by name or university
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: q
+          schema:
+            type: string
+          required: true
+          description: Search query (matched against name and university)
+      responses:
+        "200":
+          description: Matching users with connection status
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ConnectionUser"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /connections:
+    get:
+      operationId: getConnections
+      tags: [connections]
+      summary: Get user connections
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: type
+          schema:
+            type: string
+            enum: [discover, friends, requests, sent]
+          required: false
+      responses:
+        "200":
+          description: Connection list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ConnectionUser"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /connections/{userId}/connect:
+    post:
+      operationId: sendConnectionRequest
+      tags: [connections]
+      summary: Send or withdraw a connection request to a user
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: userId
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConnectBody"
+      responses:
+        "200":
+          description: Connection request status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /playback:
+    get:
+      operationId: getPlaybackState
+      tags: [tracks]
+      summary: Get the saved playback state for the current user
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Saved playback state (null if none)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaybackState"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: savePlaybackState
+      tags: [tracks]
+      summary: Save the current playback position for the authenticated user
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlaybackStateBody"
+      responses:
+        "200":
+          description: Playback state saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaybackState"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /connections/{userId}/respond:
+    post:
+      operationId: respondToConnectionRequest
+      tags: [connections]
+      summary: Accept or decline an incoming connection request
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: userId
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RespondBody"
+      responses:
+        "200":
+          description: Response result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespondResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Request not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    RegisterBody:
+      type: object
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+        name:
+          type: string
+        role:
+          type: string
+          enum: [listener, artist]
+        university:
+          type: string
+        country:
+          type: string
+      required:
+        - email
+        - password
+        - name
+        - role
+        - university
+        - country
+
+    LoginBody:
+      type: object
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+      required:
+        - email
+        - password
+
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        user:
+          $ref: "#/components/schemas/UserProfile"
+      required:
+        - token
+        - user
+
+    LogoutResponse:
+      type: object
+      properties:
+        message:
+          type: string
+      required:
+        - message
+
+    UserProfile:
+      type: object
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        name:
+          type: string
+        role:
+          type: string
+          enum: [listener, artist]
+        university:
+          type: string
+        country:
+          type: string
+        avatarUrl:
+          type: string
+          nullable: true
+      required:
+        - id
+        - email
+        - name
+        - role
+        - university
+        - country
+
+    LikeBody:
+      type: object
+      properties:
+        liked:
+          type: boolean
+
+    LikeResponse:
+      type: object
+      properties:
+        trackId:
+          type: string
+        likes:
+          type: integer
+        liked:
+          type: boolean
+      required:
+        - trackId
+        - likes
+        - liked
+
+    LibraryBody:
+      type: object
+      properties:
+        saved:
+          type: boolean
+
+    LibraryResponse:
+      type: object
+      properties:
+        trackId:
+          type: string
+        saved:
+          type: boolean
+      required:
+        - trackId
+        - saved
+
+    FeedLikeResponse:
+      type: object
+      properties:
+        itemId:
+          type: string
+        likes:
+          type: integer
+        liked:
+          type: boolean
+      required:
+        - itemId
+        - likes
+        - liked
+
+    FollowBody:
+      type: object
+      properties:
+        following:
+          type: boolean
+
+    FollowResponse:
+      type: object
+      properties:
+        artistId:
+          type: string
+        followerCount:
+          type: integer
+        following:
+          type: boolean
+      required:
+        - artistId
+        - followerCount
+        - following
+
+    Track:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        artist:
+          type: string
+        artistId:
+          type: string
+        genre:
+          type: string
+        duration:
+          type: string
+        durationSeconds:
+          type: integer
+        coverColor:
+          type: string
+        audioUrl:
+          type: ["string", "null"]
+        coverUrl:
+          type: ["string", "null"]
+        playCount:
+          type: integer
+        likes:
+          type: integer
+        university:
+          type: ["string", "null"]
+      required:
+        - id
+        - title
+        - artist
+        - artistId
+        - genre
+        - duration
+        - durationSeconds
+        - coverColor
+        - audioUrl
+        - coverUrl
+        - playCount
+        - likes
+        - university
+
+    Artist:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        genre:
+          type: string
+        university:
+          type: ["string", "null"]
+        coverColor:
+          type: string
+        avatarUrl:
+          type: ["string", "null"]
+        followerCount:
+          type: integer
+        bio:
+          type: ["string", "null"]
+        following:
+          type: boolean
+          description: Whether the authenticated user follows this artist. Omitted when unauthenticated.
+      required:
+        - id
+        - name
+        - genre
+        - university
+        - coverColor
+        - avatarUrl
+        - followerCount
+        - bio
+
+    SearchResults:
+      type: object
+      properties:
+        tracks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Track"
+        artists:
+          type: array
+          items:
+            $ref: "#/components/schemas/Artist"
+      required:
+        - tracks
+        - artists
+
+    PublicProfile:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        university:
+          type: string
+        role:
+          type: string
+          enum: [listener, artist]
+        coverColor:
+          type: string
+        bio:
+          type: ["string", "null"]
+        tracks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Track"
+      required:
+        - id
+        - name
+        - university
+        - role
+        - coverColor
+        - bio
+        - tracks
+
+    ConnectionUser:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        university:
+          type: string
+        genre:
+          type: string
+        coverColor:
+          type: string
+        avatarUrl:
+          type: string
+          nullable: true
+        mutualCount:
+          type: integer
+        status:
+          type: string
+          enum: [none, sent, received, connected]
+      required:
+        - id
+        - name
+        - university
+        - genre
+        - coverColor
+        - mutualCount
+        - status
+
+    OtpSendBody:
+      type: object
+      properties:
+        email:
+          type: string
+      required:
+        - email
+
+    OtpSendResponse:
+      type: object
+      properties:
+        sent:
+          type: boolean
+        devCode:
+          type: string
+      required:
+        - sent
+
+    OtpVerifyBody:
+      type: object
+      properties:
+        email:
+          type: string
+        code:
+          type: string
+      required:
+        - email
+        - code
+
+    OtpVerifyResponse:
+      type: object
+      properties:
+        verified:
+          type: boolean
+      required:
+        - verified
+
+    ConnectBody:
+      type: object
+      properties:
+        connect:
+          type: boolean
+
+    ConnectResponse:
+      type: object
+      properties:
+        userId:
+          type: string
+        status:
+          type: string
+          enum: [none, sent, received, connected]
+      required:
+        - userId
+        - status
+
+    RespondBody:
+      type: object
+      properties:
+        accept:
+          type: boolean
+      required:
+        - accept
+
+    RespondResponse:
+      type: object
+      properties:
+        userId:
+          type: string
+        status:
+          type: string
+          enum: [none, sent, received, connected]
+      required:
+        - userId
+        - status
+
+    PlaybackState:
+      type: object
+      properties:
+        trackId:
+          type: ["string", "null"]
+        position:
+          type: number
+      required:
+        - trackId
+        - position
+
+    PlaybackStateBody:
+      type: object
+      properties:
+        trackId:
+          type: string
+        position:
+          type: number
+      required:
+        - trackId
+        - position
+
+    UpdateArtistBody:
+      type: object
+      properties:
+        name:
+          type: string
+        bio:
+          type: string
+        genre:
+          type: string
+        university:
+          type: string
+
+    UpdateProfileBody:
+      type: object
+      properties:
+        name:
+          type: string
+        university:
+          type: string
+        country:
+          type: string
+        avatarUrl:
+          type: string
+          nullable: true
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    PlayResponse:
+      type: object
+      properties:
+        trackId:
+          type: string
+        playCount:
+          type: integer
+      required:
+        - trackId
+        - playCount
+
+    CreateTrackBody:
+      type: object
+      properties:
+        title:
+          type: string
+        genre:
+          type: string
+        audioUrl:
+          type: string
+        coverUrl:
+          type: ["string", "null"]
+        duration:
+          type: string
+        durationSeconds:
+          type: integer
+      required:
+        - title
+        - genre
+        - audioUrl
+
+    UpdateTrackBody:
+      type: object
+      properties:
+        title:
+          type: string
+        genre:
+          type: string
+        coverUrl:
+          type: ["string", "null"]
+
+    UploadUrlRequest:
+      type: object
+      required: [name, size, contentType]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        size:
+          type: integer
+          minimum: 1
+        contentType:
+          type: string
+          minLength: 1
+
+    UploadUrlResponse:
+      type: object
+      required: [uploadURL, objectPath]
+      properties:
+        uploadURL:
+          type: string
+          format: uri
+        objectPath:
+          type: string
