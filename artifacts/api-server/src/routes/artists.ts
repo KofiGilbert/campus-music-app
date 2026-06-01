@@ -1,15 +1,9 @@
-import { Router, type IRouter } from "express";
-import { verifyToken } from "./auth";
+import { Router, type IRouter, type Request, type Response } from "express";
 import { db, artists, artistFollows } from "@workspace/db";
 import { and, eq, count } from "drizzle-orm";
+import { optionalAuth, requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
-
-async function getUserId(req: Parameters<Parameters<typeof router.get>[1]>[0]): Promise<string | null> {
-  const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith("Bearer ")) return null;
-  return verifyToken(authHeader.slice(7));
-}
 
 async function getFollowerCount(artistId: string): Promise<number> {
   const [row] = await db
@@ -19,8 +13,8 @@ async function getFollowerCount(artistId: string): Promise<number> {
   return row?.count ?? 0;
 }
 
-router.get("/artists", async (req, res): Promise<void> => {
-  const userId = await getUserId(req);
+router.get("/artists", optionalAuth, async (req, res): Promise<void> => {
+  const userId = req.userId;
 
   const all = await db.select().from(artists);
 
@@ -45,12 +39,8 @@ router.get("/artists", async (req, res): Promise<void> => {
   res.json(result);
 });
 
-router.get("/artists/followed", async (req, res): Promise<void> => {
-  const userId = await getUserId(req);
-  if (!userId) {
-    res.status(401).json({ error: "Authentication required" });
-    return;
-  }
+router.get("/artists/followed", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.userId!; // guaranteed by requireAuth
   const rows = await db.select().from(artistFollows).where(eq(artistFollows.userId, userId));
   const followedIds = new Set(rows.map((r) => r.artistId));
   const all = await db.select().from(artists);
@@ -72,8 +62,8 @@ router.get("/artists/followed", async (req, res): Promise<void> => {
   res.json(followed);
 });
 
-router.get("/artists/:id", async (req, res): Promise<void> => {
-  const userId = await getUserId(req);
+router.get("/artists/:id", optionalAuth, async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+  const userId = req.userId;
   const [artist] = await db.select().from(artists).where(eq(artists.id, req.params.id)).limit(1);
   if (!artist) {
     res.status(404).json({ error: "Artist not found" });
@@ -95,12 +85,8 @@ router.get("/artists/:id", async (req, res): Promise<void> => {
   res.json({ ...artist, followerCount, following });
 });
 
-router.patch("/artists/:id", async (req, res): Promise<void> => {
-  const userId = await getUserId(req);
-  if (!userId) {
-    res.status(401).json({ error: "Authentication required" });
-    return;
-  }
+router.patch("/artists/:id", requireAuth, async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+  const userId = req.userId!; // guaranteed by requireAuth
 
   const [artist] = await db.select().from(artists).where(eq(artists.id, req.params.id)).limit(1);
   if (!artist) {
@@ -158,16 +144,12 @@ router.patch("/artists/:id", async (req, res): Promise<void> => {
   res.json({ ...updated, followerCount, following: undefined });
 });
 
-router.post("/artists/:id/follow", async (req, res): Promise<void> => {
+router.post("/artists/:id/follow", requireAuth, async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+  const userId = req.userId!; // guaranteed by requireAuth
+
   const [artist] = await db.select().from(artists).where(eq(artists.id, req.params.id)).limit(1);
   if (!artist) {
     res.status(404).json({ error: "Artist not found" });
-    return;
-  }
-
-  const userId = await getUserId(req);
-  if (!userId) {
-    res.status(401).json({ error: "Authentication required" });
     return;
   }
 

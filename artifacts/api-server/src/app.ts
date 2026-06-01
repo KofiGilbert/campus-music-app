@@ -32,6 +32,9 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? "")
   .split(",")
   .map((o) => o.trim())
   .filter(Boolean);
+if (process.env.NODE_ENV === "production" && allowedOrigins.length === 0) {
+  logger.warn("ALLOWED_ORIGINS is empty in production — CORS is running permissively");
+}
 app.use(
   cors({
     origin: allowedOrigins.length > 0 ? allowedOrigins : true,
