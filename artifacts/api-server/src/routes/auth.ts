@@ -5,9 +5,6 @@ import { db, users } from "@workspace/db";
 import { signToken } from "../lib/jwt";
 import { requireAuth } from "../middlewares/auth";
 
-// Re-exported for routes not yet migrated to the requireAuth middleware.
-export { verifyToken } from "../lib/jwt";
-
 const router: IRouter = Router();
 
 function buildUserResponse(user: {

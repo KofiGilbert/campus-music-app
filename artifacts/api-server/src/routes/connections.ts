@@ -1,7 +1,7 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import { db, userConnections, artists, users } from "@workspace/db";
 import { and, eq, ilike, inArray, ne, or } from "drizzle-orm";
-import { verifyToken } from "./auth";
+import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
 
@@ -29,18 +29,8 @@ function colorForId(id: string): string {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
-async function getUserId(req: Parameters<Parameters<typeof router.get>[1]>[0]): Promise<string | null> {
-  const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith("Bearer ")) return null;
-  return verifyToken(authHeader.slice(7));
-}
-
-router.get("/connections/search", async (req, res): Promise<void> => {
-  const userId = await getUserId(req);
-  if (!userId) {
-    res.status(401).json({ error: "Authentication required" });
-    return;
-  }
+router.get("/connections/search", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.userId!; // guaranteed by requireAuth
 
   const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
   if (!q) {
@@ -98,12 +88,8 @@ router.get("/connections/search", async (req, res): Promise<void> => {
   return;
 });
 
-router.get("/connections", async (req, res): Promise<void> => {
-  const userId = await getUserId(req);
-  if (!userId) {
-    res.status(401).json({ error: "Authentication required" });
-    return;
-  }
+router.get("/connections", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.userId!; // guaranteed by requireAuth
 
   const type = typeof req.query.type === "string" ? req.query.type : "discover";
 
@@ -353,12 +339,8 @@ router.get("/connections", async (req, res): Promise<void> => {
   res.json([]);
 });
 
-router.post("/connections/:userId/connect", async (req, res): Promise<void> => {
-  const userId = await getUserId(req);
-  if (!userId) {
-    res.status(401).json({ error: "Authentication required" });
-    return;
-  }
+router.post("/connections/:userId/connect", requireAuth, async (req: Request<{ userId: string }>, res: Response): Promise<void> => {
+  const userId = req.userId!; // guaranteed by requireAuth
 
   const targetUserId = req.params.userId;
   if (userId === targetUserId) {
@@ -422,12 +404,8 @@ router.post("/connections/:userId/connect", async (req, res): Promise<void> => {
   }
 });
 
-router.post("/connections/:userId/respond", async (req, res): Promise<void> => {
-  const userId = await getUserId(req);
-  if (!userId) {
-    res.status(401).json({ error: "Authentication required" });
-    return;
-  }
+router.post("/connections/:userId/respond", requireAuth, async (req: Request<{ userId: string }>, res: Response): Promise<void> => {
+  const userId = req.userId!; // guaranteed by requireAuth
 
   const requesterId = req.params.userId;
   const { accept } = req.body as { accept: boolean };
