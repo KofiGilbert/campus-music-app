@@ -1,46 +1,14 @@
 import { Router, type IRouter } from "express";
 import bcrypt from "bcryptjs";
-import { SignJWT, jwtVerify } from "jose";
 import { eq } from "drizzle-orm";
 import { db, users } from "@workspace/db";
-import { logger } from "../lib/logger";
+import { signToken } from "../lib/jwt";
+import { requireAuth } from "../middlewares/auth";
+
+// Re-exported for routes not yet migrated to the requireAuth middleware.
+export { verifyToken } from "../lib/jwt";
 
 const router: IRouter = Router();
-
-function getJwtSecret(): Uint8Array {
-  const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    if (process.env.NODE_ENV === "production") {
-      logger.error("JWT_SECRET environment variable is required in production");
-      process.exit(1);
-    }
-    logger.warn("JWT_SECRET not set — using insecure dev-only fallback");
-    return new TextEncoder().encode("campus-music-dev-secret-change-in-prod");
-  }
-  return new TextEncoder().encode(secret);
-}
-
-const JWT_SECRET = getJwtSecret();
-const JWT_ISSUER = "campus-music";
-const JWT_EXPIRY = "30d";
-
-export async function signToken(userId: string): Promise<string> {
-  return new SignJWT({ sub: userId })
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuer(JWT_ISSUER)
-    .setIssuedAt()
-    .setExpirationTime(JWT_EXPIRY)
-    .sign(JWT_SECRET);
-}
-
-export async function verifyToken(token: string): Promise<string | null> {
-  try {
-    const { payload } = await jwtVerify(token, JWT_SECRET, { issuer: JWT_ISSUER });
-    return payload.sub ?? null;
-  } catch {
-    return null;
-  }
-}
 
 function buildUserResponse(user: {
   id: string;
@@ -162,20 +130,8 @@ router.post("/auth/logout", (_req, res): void => {
   res.json({ message: "Logged out successfully" });
 });
 
-router.get("/auth/me", async (req, res): Promise<void> => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith("Bearer ")) {
-    res.status(401).json({ error: "Authentication required" });
-    return;
-  }
-
-  const token = authHeader.slice(7);
-  const userId = await verifyToken(token);
-
-  if (!userId) {
-    res.status(401).json({ error: "Invalid or expired token" });
-    return;
-  }
+router.get("/auth/me", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.userId!; // guaranteed by requireAuth
 
   const [user] = await db
     .select()
@@ -191,20 +147,8 @@ router.get("/auth/me", async (req, res): Promise<void> => {
   res.json(buildUserResponse(user));
 });
 
-router.patch("/auth/me", async (req, res): Promise<void> => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith("Bearer ")) {
-    res.status(401).json({ error: "Authentication required" });
-    return;
-  }
-
-  const token = authHeader.slice(7);
-  const userId = await verifyToken(token);
-
-  if (!userId) {
-    res.status(401).json({ error: "Invalid or expired token" });
-    return;
-  }
+router.patch("/auth/me", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.userId!; // guaranteed by requireAuth
 
   const { name, university, country, avatarUrl } = req.body as { name?: unknown; university?: unknown; country?: unknown; avatarUrl?: unknown };
 

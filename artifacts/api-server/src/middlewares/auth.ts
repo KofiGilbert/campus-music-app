@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
-import { verifyToken } from "../routes/auth";
+import { verifyToken } from "../lib/jwt";
 
 // Attach the authenticated user id to the request. Set by requireAuth /
 // optionalAuth so route handlers never re-parse the Authorization header.
