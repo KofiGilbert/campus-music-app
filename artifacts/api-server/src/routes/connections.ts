@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { db, userConnections, artists, users } from "@workspace/db";
+import { db, userConnections, users } from "@workspace/db";
 import { and, eq, ilike, inArray, ne, or } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 
@@ -29,6 +29,67 @@ function colorForId(id: string): string {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
+// Connection-card projection over `users` — its own contract, NOT the Artist schema.
+const connectionColumns = {
+  id: users.id,
+  name: users.name,
+  university: users.university,
+  role: users.role,
+  genre: users.genre,
+  coverColor: users.coverColor,
+  avatarUrl: users.avatarUrl,
+};
+
+type ConnectionUserRow = {
+  id: string;
+  name: string;
+  university: string;
+  role: string | null;
+  genre: string | null;
+  coverColor: string | null;
+  avatarUrl: string | null;
+};
+
+type ConnectionStatus = "none" | "sent" | "received" | "connected";
+
+// Shape a user row into the Connection card. Artists surface their real genre +
+// genre-color; everyone else shows "Listener" + a deterministic color.
+// mutualCount is harmonized to 0 across the board.
+function shapeConnection(u: ConnectionUserRow, status: ConnectionStatus) {
+  const isArtist = u.role === "artist";
+  return {
+    id: u.id,
+    name: u.name || u.id,
+    university: u.university || "Unknown University",
+    genre: isArtist ? (u.genre ?? "Artist") : "Listener",
+    coverColor: isArtist
+      ? (GENRE_COLORS[u.genre ?? ""] ?? u.coverColor ?? colorForId(u.id))
+      : colorForId(u.id),
+    avatarUrl: u.avatarUrl ?? null,
+    mutualCount: 0,
+    status,
+  };
+}
+
+// Shape by id when the row may be missing (e.g. a connection to a deleted user).
+function shapeConnectionById(
+  id: string,
+  u: ConnectionUserRow | undefined,
+  status: ConnectionStatus,
+) {
+  if (u) return shapeConnection(u, status);
+  return {
+    id,
+    name: id,
+    university: "Unknown University",
+    genre: "Listener",
+    coverColor: colorForId(id),
+    avatarUrl: null,
+    mutualCount: 0,
+    status,
+  };
+}
+
 router.get("/connections/search", requireAuth, async (req, res): Promise<void> => {
   const userId = req.userId!; // guaranteed by requireAuth
 
@@ -42,7 +103,7 @@ router.get("/connections/search", requireAuth, async (req, res): Promise<void> =
 
   const [matchedUsers, allConns] = await Promise.all([
     db
-      .select({ id: users.id, name: users.name, university: users.university, role: users.role })
+      .select(connectionColumns)
       .from(users)
       .where(
         and(
@@ -67,25 +128,14 @@ router.get("/connections/search", requireAuth, async (req, res): Promise<void> =
   );
 
   const results = matchedUsers.map((u) => {
-    let status: "none" | "sent" | "received" | "connected" = "none";
+    let status: ConnectionStatus = "none";
     if (acceptedSet.has(u.id)) status = "connected";
     else if (sentSet.has(u.id)) status = "sent";
     else if (receivedSet.has(u.id)) status = "received";
-
-    return {
-      id: u.id,
-      name: u.name || u.id,
-      university: u.university || "Unknown University",
-      genre: u.role === "artist" ? "Artist" : "Listener",
-      coverColor: colorForId(u.id),
-      avatarUrl: null,
-      mutualCount: 0,
-      status,
-    };
+    return shapeConnection(u, status);
   });
 
   res.json(results);
-  return;
 });
 
 router.get("/connections", requireAuth, async (req, res): Promise<void> => {
@@ -110,52 +160,30 @@ router.get("/connections", requireAuth, async (req, res): Promise<void> => {
 
     const allConnectedIds = new Set([...sentSet, ...receivedSet]);
 
-    const [allArtists, allUsers] = await Promise.all([
-      db.select().from(artists),
-      db
-        .select({
-          id: users.id,
-          name: users.name,
-          university: users.university,
-          role: users.role,
-        })
-        .from(users)
-        .where(ne(users.id, userId)),
-    ]);
+    // Artists are ordinary users now — one query, no virtual-ID merge.
+    const allOtherUsers = await db
+      .select(connectionColumns)
+      .from(users)
+      .where(ne(users.id, userId));
 
-    const artistConnections = allArtists.map((a) => {
-      const virtualUserId = `user-${a.id}`;
-      let status: "none" | "sent" | "received" | "connected" = "none";
-      if (acceptedSet.has(virtualUserId)) status = "connected";
-      else if (sentSet.has(virtualUserId)) status = "sent";
-      else if (receivedSet.has(virtualUserId)) status = "received";
+    const statusFor = (id: string): ConnectionStatus => {
+      if (acceptedSet.has(id)) return "connected";
+      if (sentSet.has(id)) return "sent";
+      if (receivedSet.has(id)) return "received";
+      return "none";
+    };
 
-      return {
-        id: virtualUserId,
-        name: a.name,
-        university: a.university ?? "Unknown University",
-        genre: a.genre,
-        coverColor: GENRE_COLORS[a.genre] ?? a.coverColor,
-        avatarUrl: a.avatarUrl ?? null,
-        mutualCount: 1,
-        status,
-      };
-    });
+    // Artists are always surfaced (with their real status); listeners only when
+    // not already connected/pending. Interleave the two, cap at 16.
+    const artistConnections = allOtherUsers
+      .filter((u) => u.role === "artist")
+      .map((u) => shapeConnection(u, statusFor(u.id)));
 
-    const realUserConnections = allUsers
-      .filter((u) => !allConnectedIds.has(u.id) && !acceptedSet.has(u.id))
-      .map((u) => ({
-        id: u.id,
-        name: u.name || u.id,
-        university: u.university || "Unknown University",
-        genre: u.role === "artist" ? "Artist" : "Listener",
-        coverColor: colorForId(u.id),
-        avatarUrl: null,
-        mutualCount: 0,
-        status: "none" as const,
-      }));
+    const realUserConnections = allOtherUsers
+      .filter((u) => u.role !== "artist" && !allConnectedIds.has(u.id) && !acceptedSet.has(u.id))
+      .map((u) => shapeConnection(u, "none"));
 
-    const merged: typeof artistConnections = [];
+    const merged: ReturnType<typeof shapeConnection>[] = [];
     const maxLen = Math.max(artistConnections.length, realUserConnections.length);
     for (let i = 0; i < maxLen; i++) {
       if (i < artistConnections.length) merged.push(artistConnections[i]);
@@ -174,52 +202,14 @@ router.get("/connections", requireAuth, async (req, res): Promise<void> => {
     const accepted = allConns.filter((c) => c.status === "accepted");
     const otherIds = accepted.map((c) => (c.fromUserId === userId ? c.toUserId : c.fromUserId));
 
-    const realIds = otherIds.filter((id) => !id.startsWith("user-"));
-    const artistVirtualIds = otherIds.filter((id) => id.startsWith("user-"));
-    const artistIds = artistVirtualIds.map((id) => id.slice(5));
-
-    const [realUserRows, neededArtists] = await Promise.all([
-      realIds.length > 0
-        ? db.select({ id: users.id, name: users.name, university: users.university, role: users.role })
-            .from(users)
-            .where(inArray(users.id, realIds))
-        : Promise.resolve([]),
-      artistIds.length > 0
-        ? db.select().from(artists).where(inArray(artists.id, artistIds))
-        : Promise.resolve([]),
-    ]);
-
-    const userMap = new Map(realUserRows.map((u) => [u.id, u]));
-    const artistMap = new Map(neededArtists.map((a) => [`user-${a.id}`, a]));
+    const otherUserRows = otherIds.length > 0
+      ? await db.select(connectionColumns).from(users).where(inArray(users.id, otherIds))
+      : [];
+    const userMap = new Map(otherUserRows.map((u) => [u.id, u]));
 
     const friends = accepted.map((c) => {
       const otherId = c.fromUserId === userId ? c.toUserId : c.fromUserId;
-      const realUser = userMap.get(otherId);
-      const artist = artistMap.get(otherId);
-
-      if (realUser) {
-        return {
-          id: otherId,
-          name: realUser.name || otherId,
-          university: realUser.university || "Unknown University",
-          genre: realUser.role === "artist" ? "Artist" : "Listener",
-          coverColor: colorForId(otherId),
-          avatarUrl: null,
-          mutualCount: 0,
-          status: "connected" as const,
-        };
-      }
-
-      return {
-        id: otherId,
-        name: artist?.name ?? otherId,
-        university: artist?.university ?? "Unknown University",
-        genre: artist?.genre ?? "Unknown",
-        coverColor: artist ? (GENRE_COLORS[artist.genre] ?? artist.coverColor) : colorForId(otherId),
-        avatarUrl: artist?.avatarUrl ?? null,
-        mutualCount: artist ? 1 : 0,
-        status: "connected" as const,
-      };
+      return shapeConnectionById(otherId, userMap.get(otherId), "connected");
     });
 
     res.json(friends);
@@ -230,52 +220,14 @@ router.get("/connections", requireAuth, async (req, res): Promise<void> => {
     const pending = allConns.filter((c) => c.fromUserId === userId && c.status === "pending");
     const targetIds = pending.map((c) => c.toUserId);
 
-    const realIds = targetIds.filter((id) => !id.startsWith("user-"));
-    const artistVirtualIds = targetIds.filter((id) => id.startsWith("user-"));
-    const artistIds = artistVirtualIds.map((id) => id.slice(5));
+    const targetUserRows = targetIds.length > 0
+      ? await db.select(connectionColumns).from(users).where(inArray(users.id, targetIds))
+      : [];
+    const userMap = new Map(targetUserRows.map((u) => [u.id, u]));
 
-    const [realUserRows, neededArtists] = await Promise.all([
-      realIds.length > 0
-        ? db.select({ id: users.id, name: users.name, university: users.university, role: users.role })
-            .from(users)
-            .where(inArray(users.id, realIds))
-        : Promise.resolve([]),
-      artistIds.length > 0
-        ? db.select().from(artists).where(inArray(artists.id, artistIds))
-        : Promise.resolve([]),
-    ]);
-
-    const userMap = new Map(realUserRows.map((u) => [u.id, u]));
-    const artistMap = new Map(neededArtists.map((a) => [`user-${a.id}`, a]));
-
-    const sent = pending.map((c) => {
-      const realUser = userMap.get(c.toUserId);
-      const artist = artistMap.get(c.toUserId);
-
-      if (realUser) {
-        return {
-          id: c.toUserId,
-          name: realUser.name || c.toUserId,
-          university: realUser.university || "Unknown University",
-          genre: realUser.role === "artist" ? "Artist" : "Listener",
-          coverColor: colorForId(c.toUserId),
-          avatarUrl: null,
-          mutualCount: 0,
-          status: "sent" as const,
-        };
-      }
-
-      return {
-        id: c.toUserId,
-        name: artist?.name ?? c.toUserId,
-        university: artist?.university ?? "Unknown University",
-        genre: artist?.genre ?? "Unknown",
-        coverColor: artist ? (GENRE_COLORS[artist.genre] ?? artist.coverColor) : colorForId(c.toUserId),
-        avatarUrl: artist?.avatarUrl ?? null,
-        mutualCount: artist ? 1 : 0,
-        status: "sent" as const,
-      };
-    });
+    const sent = pending.map((c) =>
+      shapeConnectionById(c.toUserId, userMap.get(c.toUserId), "sent"),
+    );
 
     res.json(sent);
     return;
@@ -285,52 +237,14 @@ router.get("/connections", requireAuth, async (req, res): Promise<void> => {
     const pending = allConns.filter((c) => c.toUserId === userId && c.status === "pending");
     const requesterIds = pending.map((c) => c.fromUserId);
 
-    const realIds = requesterIds.filter((id) => !id.startsWith("user-"));
-    const artistVirtualIds = requesterIds.filter((id) => id.startsWith("user-"));
-    const artistIds = artistVirtualIds.map((id) => id.slice(5));
+    const requesterUserRows = requesterIds.length > 0
+      ? await db.select(connectionColumns).from(users).where(inArray(users.id, requesterIds))
+      : [];
+    const userMap = new Map(requesterUserRows.map((u) => [u.id, u]));
 
-    const [realUserRows, neededArtists] = await Promise.all([
-      realIds.length > 0
-        ? db.select({ id: users.id, name: users.name, university: users.university, role: users.role })
-            .from(users)
-            .where(inArray(users.id, realIds))
-        : Promise.resolve([]),
-      artistIds.length > 0
-        ? db.select().from(artists).where(inArray(artists.id, artistIds))
-        : Promise.resolve([]),
-    ]);
-
-    const userMap = new Map(realUserRows.map((u) => [u.id, u]));
-    const artistMap = new Map(neededArtists.map((a) => [`user-${a.id}`, a]));
-
-    const requests = pending.map((c) => {
-      const realUser = userMap.get(c.fromUserId);
-      const artist = artistMap.get(c.fromUserId);
-
-      if (realUser) {
-        return {
-          id: c.fromUserId,
-          name: realUser.name || c.fromUserId,
-          university: realUser.university || "Unknown University",
-          genre: realUser.role === "artist" ? "Artist" : "Listener",
-          coverColor: colorForId(c.fromUserId),
-          avatarUrl: null,
-          mutualCount: 0,
-          status: "received" as const,
-        };
-      }
-
-      return {
-        id: c.fromUserId,
-        name: artist?.name ?? c.fromUserId,
-        university: artist?.university ?? "Unknown University",
-        genre: artist?.genre ?? "Unknown",
-        coverColor: artist ? (GENRE_COLORS[artist.genre] ?? artist.coverColor) : colorForId(c.fromUserId),
-        avatarUrl: artist?.avatarUrl ?? null,
-        mutualCount: artist ? 1 : 0,
-        status: "received" as const,
-      };
-    });
+    const requests = pending.map((c) =>
+      shapeConnectionById(c.fromUserId, userMap.get(c.fromUserId), "received"),
+    );
 
     res.json(requests);
     return;

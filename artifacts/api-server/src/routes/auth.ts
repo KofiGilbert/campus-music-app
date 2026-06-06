@@ -167,7 +167,7 @@ router.patch("/auth/me", requireAuth, async (req, res): Promise<void> => {
 
   const [updated] = await db
     .update(users)
-    .set(updates)
+    .set({ ...updates, updatedAt: new Date() })
     .where(eq(users.id, userId))
     .returning();
 

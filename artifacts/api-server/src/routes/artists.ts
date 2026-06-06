@@ -1,9 +1,46 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { db, artists, artistFollows } from "@workspace/db";
+import { db, users, artistFollows } from "@workspace/db";
 import { and, eq, count } from "drizzle-orm";
 import { optionalAuth, requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
+
+// Artist-safe projection over `users` — NEVER selects email/password/is_admin/etc.
+const artistColumns = {
+  id: users.id,
+  name: users.name,
+  genre: users.genre,
+  university: users.university,
+  coverColor: users.coverColor,
+  avatarUrl: users.avatarUrl,
+  bio: users.bio,
+};
+
+type ArtistRow = {
+  id: string;
+  name: string;
+  genre: string | null;
+  university: string;
+  coverColor: string | null;
+  avatarUrl: string | null;
+  bio: string;
+};
+
+// Shape an artist `users` row to the Artist API contract. genre/coverColor are
+// NOT NULL in the contract but nullable on `users`, so coalesce to "".
+function toArtist(a: ArtistRow, followerCount: number, following: boolean | undefined) {
+  return {
+    id: a.id,
+    name: a.name,
+    genre: a.genre ?? "",
+    university: a.university,
+    coverColor: a.coverColor ?? "",
+    avatarUrl: a.avatarUrl,
+    bio: a.bio,
+    followerCount,
+    following,
+  };
+}
 
 async function getFollowerCount(artistId: string): Promise<number> {
   const [row] = await db
@@ -16,7 +53,7 @@ async function getFollowerCount(artistId: string): Promise<number> {
 router.get("/artists", optionalAuth, async (req, res): Promise<void> => {
   const userId = req.userId;
 
-  const all = await db.select().from(artists);
+  const all = await db.select(artistColumns).from(users).where(eq(users.role, "artist"));
 
   let followedSet = new Set<string>();
   if (userId) {
@@ -30,11 +67,9 @@ router.get("/artists", optionalAuth, async (req, res): Promise<void> => {
     .groupBy(artistFollows.artistId);
   const countMap = new Map(allCounts.map((r) => [r.artistId, r.count]));
 
-  const result = all.map((a) => ({
-    ...a,
-    followerCount: countMap.get(a.id) ?? 0,
-    following: userId ? followedSet.has(a.id) : undefined,
-  }));
+  const result = all.map((a) =>
+    toArtist(a, countMap.get(a.id) ?? 0, userId ? followedSet.has(a.id) : undefined),
+  );
 
   res.json(result);
 });
@@ -43,7 +78,7 @@ router.get("/artists/followed", requireAuth, async (req, res): Promise<void> => 
   const userId = req.userId!; // guaranteed by requireAuth
   const rows = await db.select().from(artistFollows).where(eq(artistFollows.userId, userId));
   const followedIds = new Set(rows.map((r) => r.artistId));
-  const all = await db.select().from(artists);
+  const all = await db.select(artistColumns).from(users).where(eq(users.role, "artist"));
 
   const allCounts = await db
     .select({ artistId: artistFollows.artistId, count: count() })
@@ -53,18 +88,18 @@ router.get("/artists/followed", requireAuth, async (req, res): Promise<void> => 
 
   const followed = all
     .filter((a) => followedIds.has(a.id))
-    .map((a) => ({
-      ...a,
-      followerCount: countMap.get(a.id) ?? 0,
-      following: true,
-    }));
+    .map((a) => toArtist(a, countMap.get(a.id) ?? 0, true));
 
   res.json(followed);
 });
 
 router.get("/artists/:id", optionalAuth, async (req: Request<{ id: string }>, res: Response): Promise<void> => {
   const userId = req.userId;
-  const [artist] = await db.select().from(artists).where(eq(artists.id, req.params.id)).limit(1);
+  const [artist] = await db
+    .select(artistColumns)
+    .from(users)
+    .where(and(eq(users.id, req.params.id), eq(users.role, "artist")))
+    .limit(1);
   if (!artist) {
     res.status(404).json({ error: "Artist not found" });
     return;
@@ -82,13 +117,17 @@ router.get("/artists/:id", optionalAuth, async (req: Request<{ id: string }>, re
     following = existing !== undefined;
   }
 
-  res.json({ ...artist, followerCount, following });
+  res.json(toArtist(artist, followerCount, following));
 });
 
 router.patch("/artists/:id", requireAuth, async (req: Request<{ id: string }>, res: Response): Promise<void> => {
   const userId = req.userId!; // guaranteed by requireAuth
 
-  const [artist] = await db.select().from(artists).where(eq(artists.id, req.params.id)).limit(1);
+  const [artist] = await db
+    .select(artistColumns)
+    .from(users)
+    .where(and(eq(users.id, req.params.id), eq(users.role, "artist")))
+    .limit(1);
   if (!artist) {
     res.status(404).json({ error: "Artist not found" });
     return;
@@ -137,17 +176,21 @@ router.patch("/artists/:id", requireAuth, async (req: Request<{ id: string }>, r
     return;
   }
 
-  await db.update(artists).set(updates).where(eq(artists.id, artist.id));
+  await db.update(users).set({ ...updates, updatedAt: new Date() }).where(eq(users.id, artist.id));
 
-  const [updated] = await db.select().from(artists).where(eq(artists.id, artist.id)).limit(1);
+  const [updated] = await db.select(artistColumns).from(users).where(eq(users.id, artist.id)).limit(1);
   const followerCount = await getFollowerCount(artist.id);
-  res.json({ ...updated, followerCount, following: undefined });
+  res.json(toArtist(updated, followerCount, undefined));
 });
 
 router.post("/artists/:id/follow", requireAuth, async (req: Request<{ id: string }>, res: Response): Promise<void> => {
   const userId = req.userId!; // guaranteed by requireAuth
 
-  const [artist] = await db.select().from(artists).where(eq(artists.id, req.params.id)).limit(1);
+  const [artist] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(and(eq(users.id, req.params.id), eq(users.role, "artist")))
+    .limit(1);
   if (!artist) {
     res.status(404).json({ error: "Artist not found" });
     return;
@@ -156,13 +199,13 @@ router.post("/artists/:id/follow", requireAuth, async (req: Request<{ id: string
   const { following } = req.body as { following?: boolean };
   const isFollowing = following !== false;
 
-  const existing = await db
+  const [existing] = await db
     .select()
     .from(artistFollows)
     .where(and(eq(artistFollows.userId, userId), eq(artistFollows.artistId, artist.id)))
     .limit(1);
 
-  const wasFollowing = existing.length > 0;
+  const wasFollowing = existing !== undefined;
 
   if (isFollowing && !wasFollowing) {
     await db.insert(artistFollows).values({ userId, artistId: artist.id });

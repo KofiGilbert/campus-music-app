@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { inArray, count } from "drizzle-orm";
-import { db, tracks, artists, userLikes } from "@workspace/db";
+import { inArray, count, eq } from "drizzle-orm";
+import { db, tracks, users, userLikes } from "@workspace/db";
 
 const router: IRouter = Router();
 
@@ -25,7 +25,18 @@ router.get("/search", async (req, res): Promise<void> => {
 
   const [allTracks, allArtists] = await Promise.all([
     db.select().from(tracks),
-    db.select().from(artists),
+    db
+      .select({
+        id: users.id,
+        name: users.name,
+        genre: users.genre,
+        university: users.university,
+        coverColor: users.coverColor,
+        avatarUrl: users.avatarUrl,
+        bio: users.bio,
+      })
+      .from(users)
+      .where(eq(users.role, "artist")),
   ]);
 
   const matchedTracks = allTracks.filter(
@@ -36,12 +47,14 @@ router.get("/search", async (req, res): Promise<void> => {
       (t.university?.toLowerCase().includes(q) ?? false)
   );
 
-  const matchedArtists = allArtists.filter(
-    (a) =>
-      a.name.toLowerCase().includes(q) ||
-      a.genre.toLowerCase().includes(q) ||
-      (a.university?.toLowerCase().includes(q) ?? false)
-  );
+  const matchedArtists = allArtists
+    .filter(
+      (a) =>
+        a.name.toLowerCase().includes(q) ||
+        (a.genre?.toLowerCase().includes(q) ?? false) ||
+        (a.university?.toLowerCase().includes(q) ?? false)
+    )
+    .map((a) => ({ ...a, genre: a.genre ?? "", coverColor: a.coverColor ?? "" }));
 
   const tracksWithLikes = await addLikesToTracks(matchedTracks);
   res.json({ tracks: tracksWithLikes, artists: matchedArtists });

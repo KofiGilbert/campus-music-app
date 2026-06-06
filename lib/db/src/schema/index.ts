@@ -19,7 +19,6 @@
 
 export * from "./schema";
 export * from "./tracks";
-export * from "./artists";
 export * from "./likes";
 export * from "./connections";
 export * from "./artistFollows";

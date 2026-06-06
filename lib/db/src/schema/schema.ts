@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { text, varchar } from "drizzle-orm/pg-core";
+import { boolean, text, timestamp, varchar } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { campusMusic } from "./namespace";
@@ -14,6 +14,15 @@ export const users = campusMusic.table("users", {
   university: text("university").notNull().default(""),
   country: text("country").notNull().default(""),
   avatarUrl: text("avatar_url"),
+  // Artist profile fields (collapsed from the former `artists` table).
+  bio: text("bio").notNull().default(""),
+  genre: text("genre"),
+  coverColor: text("cover_color"),
+  // System (seeded a1..a10) + admin flags; timestamps.
+  isSystem: boolean("is_system").notNull().default(false),
+  isAdmin: boolean("is_admin").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({

@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, tracks, artists } from "@workspace/db";
+import { eq } from "drizzle-orm";
+import { db, tracks, users } from "@workspace/db";
 
 const router: IRouter = Router();
 
@@ -13,7 +14,7 @@ const WELL_KNOWN = [
 async function getAllUniversities(): Promise<string[]> {
   const [allTracks, allArtists] = await Promise.all([
     db.select({ university: tracks.university }).from(tracks),
-    db.select({ university: artists.university }).from(artists),
+    db.select({ university: users.university }).from(users).where(eq(users.role, "artist")),
   ]);
   const fromData = new Set<string>();
   allTracks.forEach((t) => { if (t.university) fromData.add(t.university); });
