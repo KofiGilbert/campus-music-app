@@ -78,7 +78,12 @@ async function registerUser(
     })
     .returning();
 
-  const token = await signToken(newUser.id);
+  const token = await signToken({
+    sub: newUser.id,
+    role: newUser.role,
+    isAdmin: newUser.isAdmin,
+    isSystem: newUser.isSystem,
+  });
   req.log.info({ userId: newUser.id }, "User registered");
 
   res.status(201).json({ token, user: buildUserResponse(newUser) });
@@ -111,13 +116,25 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     return;
   }
 
+  // System accounts (seeded artists) have a sentinel password and must never log
+  // in. Short-circuit before bcrypt-compare.
+  if (user.isSystem) {
+    res.status(403).json({ error: "system accounts cannot log in" });
+    return;
+  }
+
   const passwordMatch = await bcrypt.compare(password, user.password);
   if (!passwordMatch) {
     res.status(401).json({ error: "Invalid credentials" });
     return;
   }
 
-  const token = await signToken(user.id);
+  const token = await signToken({
+    sub: user.id,
+    role: user.role,
+    isAdmin: user.isAdmin,
+    isSystem: user.isSystem,
+  });
   req.log.info({ userId: user.id }, "User logged in");
 
   res.json({ token, user: buildUserResponse(user) });

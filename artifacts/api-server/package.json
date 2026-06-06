@@ -10,7 +10,8 @@
     "start": "node --enable-source-maps --env-file-if-exists=.env ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "r2:check": "tsx src/scripts/r2-check.ts"
+    "r2:check": "tsx src/scripts/r2-check.ts",
+    "admin:promote": "node --env-file-if-exists=.env --import tsx src/scripts/admin-promote.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1057.0",

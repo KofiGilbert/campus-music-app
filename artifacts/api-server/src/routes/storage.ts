@@ -7,8 +7,6 @@ import {
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
 import { requireAuth } from "../middlewares/auth";
 import { registerUpload } from "../lib/uploadRegistry";
-import { db, users } from "@workspace/db";
-import { eq } from "drizzle-orm";
 
 const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
@@ -23,9 +21,8 @@ const objectStorageService = new ObjectStorageService();
  */
 router.post("/storage/uploads/request-url", requireAuth, async (req: Request, res: Response) => {
   const userId = req.userId!; // guaranteed by requireAuth
-
-  const [user] = await db.select({ role: users.role }).from(users).where(eq(users.id, userId)).limit(1);
-  if (!user || user.role !== "artist") {
+  // Artist-only — token-side check, no DB round-trip (role is in the JWT claim).
+  if (req.auth!.role !== "artist") {
     res.status(403).json({ error: "Only artists can upload files" });
     return;
   }

@@ -22,8 +22,25 @@ const JWT_SECRET = getJwtSecret();
 const JWT_ISSUER = "campus-music";
 const JWT_EXPIRY = "30d";
 
-export async function signToken(userId: string): Promise<string> {
-  return new SignJWT({ sub: userId })
+export interface AuthClaims {
+  sub: string;
+  role: string;
+  isAdmin: boolean;
+  isSystem: boolean;
+}
+
+// NOTE: role/isAdmin/isSystem are baked into the token at sign time (login /
+// register). A change to a user's role or admin/system status does NOT take
+// effect until they obtain a new token — i.e. re-login, or token rotation when
+// refresh tokens land (Phase 2; access-token expiry also drops to ~15min then).
+// Acceptable for Phase 0 (admin promotion is a deliberate, infrequent action).
+export async function signToken(claims: AuthClaims): Promise<string> {
+  return new SignJWT({
+    sub: claims.sub,
+    role: claims.role,
+    isAdmin: claims.isAdmin,
+    isSystem: claims.isSystem,
+  })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuer(JWT_ISSUER)
     .setIssuedAt()
@@ -31,10 +48,16 @@ export async function signToken(userId: string): Promise<string> {
     .sign(JWT_SECRET);
 }
 
-export async function verifyToken(token: string): Promise<string | null> {
+export async function verifyToken(token: string): Promise<AuthClaims | null> {
   try {
     const { payload } = await jwtVerify(token, JWT_SECRET, { issuer: JWT_ISSUER });
-    return payload.sub ?? null;
+    if (typeof payload.sub !== "string") return null;
+    return {
+      sub: payload.sub,
+      role: typeof payload.role === "string" ? payload.role : "listener",
+      isAdmin: payload.isAdmin === true,
+      isSystem: payload.isSystem === true,
+    };
   } catch {
     return null;
   }

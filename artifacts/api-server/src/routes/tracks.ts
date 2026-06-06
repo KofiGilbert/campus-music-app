@@ -39,14 +39,16 @@ async function getLikeCount(trackId: string): Promise<number> {
 
 router.post("/tracks", requireAuth, async (req, res): Promise<void> => {
   const userId = req.userId!; // guaranteed by requireAuth
+  // Artist-only — token-side gate before the DB hit (role is in the JWT claim).
+  if (req.auth!.role !== "artist") {
+    res.status(403).json({ error: "Only artists can upload tracks" });
+    return;
+  }
 
+  // Still need the row for the denormalized artist name + university on the track.
   const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
   if (!user) {
     res.status(401).json({ error: "User not found" });
-    return;
-  }
-  if (user.role !== "artist") {
-    res.status(403).json({ error: "Only artists can upload tracks" });
     return;
   }
 
