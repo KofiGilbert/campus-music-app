@@ -1,5 +1,4 @@
 import { db, tracks } from "@workspace/db";
-import { sql } from "drizzle-orm";
 import { logger } from "./logger";
 
 const PHOTOS = [

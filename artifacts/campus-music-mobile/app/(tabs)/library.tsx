@@ -20,7 +20,7 @@ type Tab = "liked" | "library";
 export default function LibraryScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { currentTrack, isPlaying, isLoading, playTrack, playNext, addToQueue, togglePlay, nextTrack, toggleLike, likedTracks, libraryTracks, tracks, addToLibrary, removeFromLibrary, libraryIds } = usePlayer();
+  const { currentTrack, isPlaying, isLoading, playTrack, playNext, addToQueue, togglePlay, nextTrack, toggleLike, likedTracks, libraryTracks, tracks, addToLibrary } = usePlayer();
   const [activeTab, setActiveTab] = useState<Tab>("liked");
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;

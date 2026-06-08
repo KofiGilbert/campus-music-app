@@ -1,0 +1,19 @@
+# Build output & deps
+**/dist/**
+**/build/**
+**/node_modules/**
+**/.next/**
+**/.expo/**
+**/coverage/**
+
+# Generated code (orval client + zod)
+**/generated/**
+
+# Generated SQL migrations (drizzle-kit owns whitespace here)
+lib/db/migrations/**
+
+# Lockfiles & throwaway sandbox
+pnpm-lock.yaml
+**/*.lock
+**/package-lock.json
+artifacts/mockup-sandbox/**

@@ -166,7 +166,6 @@ function TrackFeedCard({
   onLike: () => void;
   liked: boolean;
 }) {
-  const colors = useColors();
   const insets = useSafeAreaInsets();
   const seedComments = getCommentsForIndex(index);
   const cardHeight = Platform.OS === "web" ? H - 84 : H;
@@ -192,7 +191,8 @@ function TrackFeedCard({
     if (Platform.OS !== "web") Haptics.selectionAsync();
     setLikedComments((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
     setAllComments((prev) =>
@@ -628,13 +628,6 @@ const styles = StyleSheet.create({
     position: "relative",
   },
 
-  artCenter: {
-    position: "absolute",
-    top: 0, left: 0, right: 0, bottom: 0,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
   playZone: {
     position: "absolute",
     top: "20%",
@@ -719,8 +712,6 @@ const styles = StyleSheet.create({
   commenterInitial: { color: "#fff", fontSize: 11, fontWeight: "700" },
   commenterName: { color: "rgba(255,255,255,0.6)", fontSize: 11, marginBottom: 1 },
   commentText: { color: "#fff", fontSize: 13, lineHeight: 18 },
-  commentLike: { alignItems: "center", gap: 2, paddingLeft: 4 },
-  commentLikeCount: { color: "rgba(255,255,255,0.6)", fontSize: 10 },
   viewAllComments: { color: "rgba(255,255,255,0.5)", fontSize: 12, marginTop: 4 },
 
   // Comment sheet modal

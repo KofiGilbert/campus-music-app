@@ -1,5 +1,4 @@
 import { Router, type IRouter } from "express";
-import { logger } from "../lib/logger";
 import { authLimiter } from "../middlewares/rateLimit";
 
 const router: IRouter = Router();
