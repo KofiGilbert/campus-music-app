@@ -4,8 +4,13 @@ import { eq } from "drizzle-orm";
 import { db, users } from "@workspace/db";
 import { signToken } from "../lib/jwt";
 import { requireAuth } from "../middlewares/auth";
+import { authLimiter } from "../middlewares/rateLimit";
 
 const router: IRouter = Router();
+
+// Rate-limit the whole auth surface (login/register/me) per IP. Shares one
+// bucket with the OTP router via the same limiter instance.
+router.use(authLimiter);
 
 function buildUserResponse(user: {
   id: string;

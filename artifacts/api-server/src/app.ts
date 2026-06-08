@@ -6,6 +6,13 @@ import { logger } from "./lib/logger";
 
 const app: Express = express();
 
+// Trust one proxy hop (Fly's edge / load balancer) so req.ip is the real client
+// address rather than the proxy's. The rate limiter keys on req.ip, so without
+// this every request would share a single proxy-IP bucket. A fixed count (not
+// `true`) avoids express-rate-limit's IP-spoofing warning — we trust exactly the
+// one hop in front of us. Harmless in local dev (no proxy → no hop to trust).
+app.set("trust proxy", 1);
+
 app.use(
   pinoHttp({
     logger,

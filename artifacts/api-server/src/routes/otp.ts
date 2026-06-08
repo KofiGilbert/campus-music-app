@@ -1,7 +1,11 @@
 import { Router, type IRouter } from "express";
 import { logger } from "../lib/logger";
+import { authLimiter } from "../middlewares/rateLimit";
 
 const router: IRouter = Router();
+
+// Rate-limit OTP send/verify per IP — shares the auth bucket (same instance).
+router.use(authLimiter);
 
 // In-memory OTP store: email → { code, expiresAt }
 const otpStore = new Map<string, { code: string; expiresAt: number }>();
