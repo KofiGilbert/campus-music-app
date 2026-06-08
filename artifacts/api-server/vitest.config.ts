@@ -6,9 +6,11 @@ export default defineConfig({
     include: ["src/**/*.test.ts"],
     env: {
       NODE_ENV: "test",
-      // Trip the auth rate limiter after a handful of requests so the limiter
-      // test stays cheap. Well above any single happy-path test's auth calls.
-      AUTH_RATE_LIMIT_MAX: "5",
+      // NB: the auth rate-limit budget is intentionally NOT set globally here.
+      // A low global limit would hand surprise 429s to any future happy-path
+      // test that makes several auth calls (register → login → me, etc.). The
+      // limiter test scopes its own tiny budget via vi.stubEnv + a dynamic
+      // import of the app (see __tests__/rate-limit.test.ts).
       // The db Pool is created lazily at import, so a placeholder URL lets modules
       // load without a real DB. Integration tests that actually query get a real
       // DATABASE_URL from the CI Postgres service container (passed through here).

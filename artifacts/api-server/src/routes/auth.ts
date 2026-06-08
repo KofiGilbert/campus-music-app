@@ -8,9 +8,13 @@ import { authLimiter } from "../middlewares/rateLimit";
 
 const router: IRouter = Router();
 
-// Rate-limit the whole auth surface (login/register/me) per IP. Shares one
-// bucket with the OTP router via the same limiter instance.
-router.use(authLimiter);
+// authLimiter is attached PER-ROUTE below, not via router.use(). These routers
+// are mounted without a path prefix, so a router-level limiter would fire for
+// every request that merely passes THROUGH this router on its way to a later
+// one (feed, search, …) — double-counting non-auth traffic against the auth
+// bucket. Inline on the brute-forceable routes only: register/signup/login here,
+// otp/send + otp/verify in otp.ts. logout (stateless) and /auth/me (read, already
+// gated by requireAuth, polled by the app) are intentionally unthrottled.
 
 function buildUserResponse(user: {
   id: string;
@@ -94,15 +98,15 @@ async function registerUser(
   res.status(201).json({ token, user: buildUserResponse(newUser) });
 }
 
-router.post("/auth/register", async (req, res): Promise<void> => {
+router.post("/auth/register", authLimiter, async (req, res): Promise<void> => {
   await registerUser(req, res);
 });
 
-router.post("/auth/signup", async (req, res): Promise<void> => {
+router.post("/auth/signup", authLimiter, async (req, res): Promise<void> => {
   await registerUser(req, res);
 });
 
-router.post("/auth/login", async (req, res): Promise<void> => {
+router.post("/auth/login", authLimiter, async (req, res): Promise<void> => {
   const { email, password } = req.body as { email?: unknown; password?: unknown };
 
   if (typeof email !== "string" || !email || typeof password !== "string" || !password) {

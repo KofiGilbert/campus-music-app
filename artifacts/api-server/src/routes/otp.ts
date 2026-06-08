@@ -3,8 +3,10 @@ import { authLimiter } from "../middlewares/rateLimit";
 
 const router: IRouter = Router();
 
-// Rate-limit OTP send/verify per IP — shares the auth bucket (same instance).
-router.use(authLimiter);
+// authLimiter is attached per-route (send/verify) below, not via router.use() —
+// see the explanation in routes/auth.ts. Same instance, so OTP shares the auth
+// bucket; mounting it router-level here would throttle unrelated downstream
+// routes that merely pass through this router.
 
 // In-memory OTP store: email → { code, expiresAt }
 const otpStore = new Map<string, { code: string; expiresAt: number }>();
@@ -15,7 +17,7 @@ function generateCode(): string {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
-router.post("/auth/otp/send", (req, res): void => {
+router.post("/auth/otp/send", authLimiter, (req, res): void => {
   const { email } = req.body as { email?: unknown };
 
   if (typeof email !== "string" || !email.includes("@")) {
@@ -34,7 +36,7 @@ router.post("/auth/otp/send", (req, res): void => {
   res.json({ sent: true, ...(isDev ? { devCode: code } : {}) });
 });
 
-router.post("/auth/otp/verify", (req, res): void => {
+router.post("/auth/otp/verify", authLimiter, (req, res): void => {
   const { email, code } = req.body as { email?: unknown; code?: unknown };
 
   if (typeof email !== "string" || !email || typeof code !== "string" || !code) {
