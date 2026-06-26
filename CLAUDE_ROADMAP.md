@@ -1,6 +1,6 @@
 # CLAUDE_ROADMAP.md — Operating Manual for Claude Code on Campus Music
 
-> **You are the implementation partner. Devin is the architect/reviewer. Kofi is the product owner.** This file is your operating manual. `DEVIN_ROADMAP.md` is the product + architectural roadmap (the *what*); this file is the *how*.
+> **You are the autonomous implementation partner.** Devin completed Phases 0-3 as architect/reviewer; from Phase 4 onward you operate independently. Kofi is the product owner. This file is your operating manual. `DEVIN_ROADMAP.md` is the product + architectural roadmap (the *what*); `PHASE_HANDOVER.md` contains established conventions and phase-by-phase design notes (the *how*).
 
 ---
 
@@ -8,8 +8,9 @@
 
 1. **`DEVIN_ROADMAP.md`** — the full product + architectural roadmap. Codebase audit, MVP plan (Phases 0–11.5), post-MVP AI track (Phases 12–17), §6 decisions table. The source of truth for **scope**.
 2. **`CLAUDE_ROADMAP.md`** (this file) — workflow, code-quality rules, definition of done, what NOT to do without approval, tech stack reference. The source of truth for **how**.
+3. **`PHASE_HANDOVER.md`** — established conventions from Phases 0–3, phase-by-phase design notes (Phases 4–17), self-review checklist. The source of truth for **implementation patterns and architecture**.
 
-If those two files disagree with each other, or with the codebase, **stop and flag it on the relevant PR**. Do not silently pick one.
+If these files disagree with each other, or with the codebase, **stop and flag it on the relevant PR**. Do not silently pick one.
 
 ---
 
@@ -35,9 +36,11 @@ For each phase:
    Append `phase-<N>-<short-name>` after the prefix so the branch is self-describing. Example: Phase 0 → `chore/phase-0-foundations`. Phase 1 → `feature/phase-1-real-auth`.
 3. Implement the phase. Land each logical chunk in its own commit.
 4. Open a PR titled `Phase <N>: <short summary>`. Use the repo's PR template.
-5. Wait for Devin's review **and** green CI.
-6. Address feedback in **new commits** — never amend or force-push.
-7. When merged, immediately open the next phase's branch from `main`.
+5. **Self-review:** Before opening the PR, review your own commits against `DEVIN_ROADMAP.md` and `PHASE_HANDOVER.md`. Verify schema, routes, tests, and migrations match the spec. Run through the self-review checklist in `PHASE_HANDOVER.md` §3.
+6. Open the PR. Wait for **green CI**. Fix any failures in **new commits** — never amend or force-push.
+7. When CI is green, **merge the PR** (no external approval needed — you are operating autonomously).
+8. **Create a post-phase doc PR** updating `DEVIN_ROADMAP.md` to reflect the phase's completion. Follow the pattern documented in `PHASE_HANDOVER.md` §4 (see PRs #7, #9, #11, #13 for examples).
+9. When the doc PR's CI is green, merge it. Then immediately open the next phase's branch from `main`.
 
 **Do not start a new phase before the previous one is merged.**
 
@@ -159,9 +162,9 @@ For each phase:
 - **Skipping CI** with `[skip ci]` or pushing directly to `main`.
 - **Force pushes** on any branch under review.
 - **Mass refactors** unrelated to the current phase.
-- **AI model / prompt changes** that affect user-facing outputs without Devin's sign-off.
+- **AI model / prompt changes** that affect user-facing outputs without Kofi's sign-off.
 
-When in doubt → **ask Devin first**. If Devin doesn't have an opinion → ask Kofi.
+When in doubt → **ask Kofi**.
 
 ---
 
@@ -241,38 +244,27 @@ For full details on each phase, read the corresponding section of `DEVIN_ROADMAP
 
 ---
 
-## 9. Phase 0 starting checklist (your first PR)
+## 9. Phases 0–3 — COMPLETE
 
-Open branch `chore/phase-0-foundations` immediately after this docs PR merges (Phase 0 is tooling + infra + refactor — no new user-facing functionality, so the `chore/` prefix is correct per CONTRIBUTING.md). Deliverables (from `DEVIN_ROADMAP.md` Phase 0 + this section, exhaustive):
+Phases 0–3 have been implemented and merged:
+- **Phase 0** (Foundations): PR #6 — ESLint, Prettier, CI, auth middleware, artists→users collapse, versioned migrations, Fly.io setup, mobile auth gate, admin flag.
+- **Phase 1** (Real Auth): PR #8 — Refresh tokens, email verification (Resend + OTP), password reset, `requireVerified` middleware.
+- **Phase 2** (Storage + Audio + AI Foundations): PR #10 — R2 + Supabase Storage adapters, audio transcoder worker, avatar upload, play history + skips, pgvector + AI schema.
+- **Phase 3** (Social Feed): PR #12 — Posts (original/repost/quote), polymorphic comments, post/comment likes, shares, mentions/hashtags, feed rewrite, mobile UI.
 
-- **ESLint + Prettier** config across the monorepo: `typescript-eslint` + `eslint-plugin-react` + `eslint-plugin-react-native` + `eslint-plugin-drizzle`. Apply zero-warning policy.
-- **Husky** + **lint-staged** pre-commit hook running `eslint --fix` + `prettier --write` + `tsc --noEmit` on staged files.
-- **GitHub Actions CI** workflow: `lint → typecheck → test → build` on every PR. Cache pnpm + Turbo. Postgres service container for migration tests.
-- **`requireAuth` middleware** in `api-server`, applied to every authenticated route. Delete every inlined token-check. Add `requireAdmin` variant.
-- **Collapse `artists` into `users`**: SQL migration that copies seeded `a1`–`a10` rows into `users` with `role=artist`, `is_system=true`. Drop the `artists` table. Update all references in `api-server` + `lib/api-zod` + `campus-music-mobile`. Delete the virtual `user-<artistId>` hack.
-- **Versioned SQL migrations infrastructure**: `lib/db/migrations/` directory, `pnpm db:migrate` command using `drizzle-kit migrate`, CI step that runs migrations against a fresh test DB.
-- **Remove `drizzle-kit push`** from the post-merge hook and from production. Document the new workflow in `lib/db/README.md`.
-- **Fly.io setup**: organization, app `campus-music-api`, `fly.toml` with regions `iad` + `lax`, secrets configured via `flyctl secrets set`. Manual `fly deploy` verified — health check returns 200, DB connectivity verified.
-- **Cloudflare setup**: account, R2 bucket `campus-music-audio`, API token scoped to that bucket, connectivity test from `api-server` (`HEAD` on a test object).
-- **Mobile auth gate**: rewrite `app/index.tsx` so unauthenticated users redirect to `/onboarding/welcome` (the existing entry point — see `artifacts/campus-music-mobile/app/onboarding/welcome.tsx`) instead of straight into the tabs.
-- **Delete the broken `POST /feed/:id/like`** endpoint — it's a no-op. Will be properly replaced by post-likes in Phase 3.
-- **`is_admin` flag** added to `users`, included in JWT claims. CLI script `pnpm admin:promote <email>` that flips the flag (with confirmation prompt).
-- **Rate limiting** on `/auth/*` endpoints via `express-rate-limit` (Redis-backed if Redis is already in the stack; in-memory fine for now).
-- **Pre-commit hook** installed via Husky; verify it fires on a sample commit.
-- **Open a PR** titled `Phase 0: Foundations`. Use the repo's PR template. Wait for Devin's review + green CI. Address review in new commits. Do not force-push.
+Current migration count: 0000–0008 (9 migrations). Next migration starts at **0009**.
 
-When this PR merges, immediately open `feature/phase-1-real-auth` and start Phase 1.
+**Your next task is Phase 4.** Read `PHASE_HANDOVER.md` for design notes, then follow the workflow in §2 above.
 
 ---
 
 ## 10. Roles — who owns what
 
-- **You (Claude Code):** implementation. Code, tests, migrations, infra-as-code (`fly.toml`, GHA workflows), per-phase docs.
-- **Devin (architect / reviewer):** code review on every PR, architectural decisions outside §3, schema reviews, security reviews, AI/ML strategy, performance reviews. Session URL: https://app.devin.ai/sessions/db416d2861a3475195e36b318e3b0c05.
+- **You (Claude Code):** implementation, self-review, PR creation + merge, post-phase doc PRs. You are the sole developer from Phase 4 onward.
 - **Kofi (product owner):** product calls, scope changes, secrets + credentials provisioning, vendor approvals, final say.
 
-When in doubt about who owns a decision → **ask Devin first**. If Devin doesn't have an opinion → ask Kofi.
+When in doubt about a decision → **ask Kofi**. If a decision is already covered in `DEVIN_ROADMAP.md` §3 or `PHASE_HANDOVER.md`, follow what's documented.
 
 ---
 
-*Welcome aboard. Read DEVIN_ROADMAP.md cover to cover. Then come back and re-read this. Then open the Phase 0 branch.*
+*Phases 0–3 are done. Read DEVIN_ROADMAP.md, PHASE_HANDOVER.md, and this file. Then start Phase 4.*
