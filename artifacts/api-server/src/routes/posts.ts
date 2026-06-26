@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { and, count, desc, eq, isNull, lt } from "drizzle-orm";
-import { db, posts, tracks, postLikes } from "@workspace/db";
+import { db, posts, tracks, postLikes, postShares } from "@workspace/db";
 import { optionalAuth, requireAuth, requireVerified } from "../middlewares/auth";
 import { shapePost, shapePosts } from "../lib/postShape";
 
@@ -154,6 +154,101 @@ router.post(
 
     const [{ c }] = await db.select({ c: count() }).from(postLikes).where(eq(postLikes.postId, postId));
     res.json({ liked, likeCount: c });
+  },
+);
+
+/** POST /posts/:id/share — record a share. Returns { shareCount, deepLink }. */
+router.post(
+  "/posts/:id/share",
+  requireAuth,
+  async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+    const userId = req.userId!;
+    const postId = req.params.id;
+    const [post] = await db
+      .select({ id: posts.id })
+      .from(posts)
+      .where(and(eq(posts.id, postId), isNull(posts.deletedAt)))
+      .limit(1);
+    if (!post) {
+      res.status(404).json({ error: "Post not found" });
+      return;
+    }
+    const { platform } = req.body as { platform?: unknown };
+    const plat = typeof platform === "string" && platform ? platform : "internal";
+    await db.insert(postShares).values({ postId, userId, platform: plat });
+    const [{ c }] = await db
+      .select({ c: count() })
+      .from(postShares)
+      .where(eq(postShares.postId, postId));
+    res.json({ shareCount: c, deepLink: `/post/${postId}` });
+  },
+);
+
+/** POST /posts/:id/repost — create a repost of a post. 409 if already reposted. */
+router.post(
+  "/posts/:id/repost",
+  requireAuth,
+  async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+    const userId = req.userId!;
+    const originalPostId = req.params.id;
+    const [orig] = await db
+      .select({ id: posts.id })
+      .from(posts)
+      .where(and(eq(posts.id, originalPostId), isNull(posts.deletedAt)))
+      .limit(1);
+    if (!orig) {
+      res.status(404).json({ error: "Post not found" });
+      return;
+    }
+    const [existing] = await db
+      .select({ id: posts.id })
+      .from(posts)
+      .where(
+        and(
+          eq(posts.type, "repost"),
+          eq(posts.authorUserId, userId),
+          eq(posts.originalPostId, originalPostId),
+          isNull(posts.deletedAt),
+        ),
+      )
+      .limit(1);
+    if (existing) {
+      res.status(409).json({ error: "Already reposted" });
+      return;
+    }
+    const [repost] = await db
+      .insert(posts)
+      .values({ authorUserId: userId, body: "", type: "repost", originalPostId })
+      .returning();
+    res.status(201).json(await shapePost(repost, userId));
+  },
+);
+
+/** DELETE /posts/:id/unrepost — soft-delete the viewer's repost of a post. */
+router.delete(
+  "/posts/:id/unrepost",
+  requireAuth,
+  async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+    const userId = req.userId!;
+    const originalPostId = req.params.id;
+    const [existing] = await db
+      .select({ id: posts.id })
+      .from(posts)
+      .where(
+        and(
+          eq(posts.type, "repost"),
+          eq(posts.authorUserId, userId),
+          eq(posts.originalPostId, originalPostId),
+          isNull(posts.deletedAt),
+        ),
+      )
+      .limit(1);
+    if (!existing) {
+      res.status(404).json({ error: "Repost not found" });
+      return;
+    }
+    await db.update(posts).set({ deletedAt: new Date() }).where(eq(posts.id, existing.id));
+    res.status(204).send();
   },
 );
 
