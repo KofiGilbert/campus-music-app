@@ -1268,6 +1268,195 @@ paths:
               schema:
                 $ref: "#/components/schemas/MarkReadResponse"
 
+  /live/sessions:
+    post:
+      operationId: createLiveSession
+      tags: [live]
+      summary: Go live (host)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLiveSessionBody"
+      responses:
+        "201":
+          description: Live session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LiveSession"
+    get:
+      operationId: getLiveSessions
+      tags: [live]
+      summary: List currently-live sessions
+      responses:
+        "200":
+          description: Live sessions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LiveSessionsResponse"
+
+  /live/sessions/{id}:
+    get:
+      operationId: getLiveSession
+      tags: [live]
+      summary: Get a live session
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Live session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LiveSession"
+
+  /live/sessions/{id}/end:
+    post:
+      operationId: endLiveSession
+      tags: [live]
+      summary: End a live session (host)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Ended session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LiveSession"
+
+  /live/sessions/{id}/token:
+    post:
+      operationId: getLiveToken
+      tags: [live]
+      summary: Mint a LiveKit access token (host publishes, listener subscribes)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: LiveKit token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LiveTokenResponse"
+        "503":
+          description: Live streaming not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /live/sessions/{id}/join:
+    post:
+      operationId: joinLiveSession
+      tags: [live]
+      summary: Register listener presence
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Listener count
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListenerCountResponse"
+
+  /live/sessions/{id}/leave:
+    post:
+      operationId: leaveLiveSession
+      tags: [live]
+      summary: Drop listener presence
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Listener count
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListenerCountResponse"
+
+  /live/sessions/{id}/chat:
+    get:
+      operationId: getLiveChat
+      tags: [live]
+      summary: Recent chat for a live session
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+        - in: query
+          name: cursor
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Chat messages
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LiveChatResponse"
+    post:
+      operationId: sendLiveChat
+      tags: [live]
+      summary: Post a chat message (broadcast over the socket)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendLiveChatBody"
+      responses:
+        "201":
+          description: Chat message
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LiveChatMessage"
+
   /search:
     get:
       operationId: search
@@ -2295,6 +2484,154 @@ components:
       required:
         - ok
         - lastReadAt
+
+    LiveHost:
+      type: object
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        name:
+          type: string
+        avatarUrl:
+          type: ["string", "null"]
+        role:
+          type: string
+      required:
+        - id
+        - username
+        - name
+        - role
+
+    LiveSession:
+      type: object
+      properties:
+        id:
+          type: string
+        host:
+          oneOf:
+            - $ref: "#/components/schemas/LiveHost"
+            - type: "null"
+        title:
+          type: string
+        status:
+          type: string
+          enum: [live, ended]
+        transport:
+          type: string
+        listenerCount:
+          type: integer
+        peakListenerCount:
+          type: integer
+        recordingTrackId:
+          type: ["string", "null"]
+        startedAt:
+          type: string
+        endedAt:
+          type: ["string", "null"]
+      required:
+        - id
+        - title
+        - status
+        - transport
+        - listenerCount
+        - peakListenerCount
+        - startedAt
+
+    LiveSessionsResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/LiveSession"
+      required:
+        - items
+
+    CreateLiveSessionBody:
+      type: object
+      properties:
+        title:
+          type: string
+
+    LiveTokenResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        wsUrl:
+          type: ["string", "null"]
+        room:
+          type: string
+        role:
+          type: string
+          enum: [host, listener]
+      required:
+        - token
+        - room
+        - role
+
+    ListenerCountResponse:
+      type: object
+      properties:
+        listenerCount:
+          type: integer
+      required:
+        - listenerCount
+
+    LiveChatUser:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        avatarUrl:
+          type: ["string", "null"]
+      required:
+        - id
+        - name
+
+    LiveChatMessage:
+      type: object
+      properties:
+        id:
+          type: string
+        sessionId:
+          type: string
+        user:
+          $ref: "#/components/schemas/LiveChatUser"
+        body:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - sessionId
+        - body
+        - createdAt
+
+    LiveChatResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/LiveChatMessage"
+        nextCursor:
+          type: ["string", "null"]
+      required:
+        - items
+        - nextCursor
+
+    SendLiveChatBody:
+      type: object
+      properties:
+        body:
+          type: string
+      required:
+        - body
 
     Artist:
       type: object

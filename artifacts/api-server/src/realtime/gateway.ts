@@ -32,3 +32,4 @@ export function realtime(): RealtimeGateway {
 // the socket layer never drift.
 export const userRoom = (userId: string): string => `user:${userId}`;
 export const conversationRoom = (conversationId: string): string => `conv:${conversationId}`;
+export const liveRoom = (sessionId: string): string => `live:${sessionId}`;

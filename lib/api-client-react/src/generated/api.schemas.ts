@@ -347,6 +347,90 @@ export interface MarkReadResponse {
   lastReadAt: string;
 }
 
+export interface LiveHost {
+  id: string;
+  username: string;
+  name: string;
+  /** @nullable */
+  avatarUrl?: string | null;
+  role: string;
+}
+
+export type LiveSessionStatus = (typeof LiveSessionStatus)[keyof typeof LiveSessionStatus];
+
+export const LiveSessionStatus = {
+  live: "live",
+  ended: "ended",
+} as const;
+
+export interface LiveSession {
+  id: string;
+  host?: LiveHost | null;
+  title: string;
+  status: LiveSessionStatus;
+  transport: string;
+  listenerCount: number;
+  peakListenerCount: number;
+  /** @nullable */
+  recordingTrackId?: string | null;
+  startedAt: string;
+  /** @nullable */
+  endedAt?: string | null;
+}
+
+export interface LiveSessionsResponse {
+  items: LiveSession[];
+}
+
+export interface CreateLiveSessionBody {
+  title?: string;
+}
+
+export type LiveTokenResponseRole =
+  (typeof LiveTokenResponseRole)[keyof typeof LiveTokenResponseRole];
+
+export const LiveTokenResponseRole = {
+  host: "host",
+  listener: "listener",
+} as const;
+
+export interface LiveTokenResponse {
+  token: string;
+  /** @nullable */
+  wsUrl?: string | null;
+  room: string;
+  role: LiveTokenResponseRole;
+}
+
+export interface ListenerCountResponse {
+  listenerCount: number;
+}
+
+export interface LiveChatUser {
+  id: string;
+  name: string;
+  /** @nullable */
+  avatarUrl?: string | null;
+}
+
+export interface LiveChatMessage {
+  id: string;
+  sessionId: string;
+  user?: LiveChatUser;
+  body: string;
+  createdAt: string;
+}
+
+export interface LiveChatResponse {
+  items: LiveChatMessage[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
+export interface SendLiveChatBody {
+  body: string;
+}
+
 export interface Artist {
   id: string;
   name: string;
@@ -645,6 +729,10 @@ export type GetConversationsParams = {
 
 export type GetMessagesParams = {
   limit?: number;
+  cursor?: string;
+};
+
+export type GetLiveChatParams = {
   cursor?: string;
 };
 
