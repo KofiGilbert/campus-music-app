@@ -78,6 +78,7 @@ export default tseslint.config(
   // ---- Node packages: api-server, libs, scripts, tooling configs -----------
   {
     files: [
+      "apps/**/*.{ts,mjs,js}",
       "artifacts/api-server/**/*.{ts,mjs,js}",
       "lib/**/*.{ts,mjs,js}",
       "scripts/**/*.{ts,mjs,js}",

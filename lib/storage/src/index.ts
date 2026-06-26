@@ -22,6 +22,8 @@ export interface StorageProvider {
   deleteObject(key: string): Promise<void>;
   objectExists(key: string): Promise<boolean>;
   putBuffer(key: string, data: Buffer, contentType: string): Promise<void>;
+  /** Download an object into memory (used by the transcoder to read raw uploads). */
+  getBuffer(key: string): Promise<Buffer>;
 }
 
 const DEFAULT_UPLOAD_TTL = 900; // 15 min
@@ -96,6 +98,12 @@ export class R2Adapter implements StorageProvider {
       new PutObjectCommand({ Bucket: this.bucket, Key: key, Body: data, ContentType: contentType }),
     );
   }
+
+  async getBuffer(key: string): Promise<Buffer> {
+    const res = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
+    if (!res.Body) throw new Error(`Empty object: ${key}`);
+    return Buffer.from(await res.Body.transformToByteArray());
+  }
 }
 
 export interface SupabaseStorageConfig {
@@ -149,6 +157,12 @@ export class SupabaseStorageAdapter implements StorageProvider {
       .upload(key, data, { contentType, upsert: true });
     if (error) throw error;
   }
+
+  async getBuffer(key: string): Promise<Buffer> {
+    const { data, error } = await this.client.from(this.bucket).download(key);
+    if (error || !data) throw error ?? new Error(`Failed to download ${key}`);
+    return Buffer.from(await data.arrayBuffer());
+  }
 }
 
 /** In-memory adapter for dev/CI/tests — no external service, no real persistence. */
@@ -176,6 +190,11 @@ export class MemoryStorageAdapter implements StorageProvider {
   putBuffer(key: string, data: Buffer): Promise<void> {
     this.store.set(key, data);
     return Promise.resolve();
+  }
+
+  getBuffer(key: string): Promise<Buffer> {
+    const buf = this.store.get(key);
+    return buf ? Promise.resolve(buf) : Promise.reject(new Error(`Not found: ${key}`));
   }
 }
 
