@@ -158,3 +158,13 @@ overrides:
   # drizzle-kit uses esbuild internally on an older version that's vulnerable, this overrides it
   "@esbuild-kit/esm-loader": "npm:tsx@^4.21.0"
   esbuild: "0.27.3"
+
+# pnpm 11.9.0+ gates dependency build scripts on `allowBuilds` (the older
+# `onlyBuiltDependencies` list above is no longer sufficient for it, and a cold
+# CI install errors with ERR_PNPM_IGNORED_BUILDS otherwise). Mirror the same
+# trusted set so CI's `pnpm install` is allowed to run their build scripts.
+allowBuilds:
+  "@swc/core": true
+  esbuild: true
+  msw: true
+  unrs-resolver: true

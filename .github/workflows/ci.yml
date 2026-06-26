@@ -29,10 +29,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:
-          # Pinned to the exact pnpm that generated pnpm-lock.yaml. Floating to
-          # the latest 11.x (e.g. 11.9.0) changed onlyBuiltDependencies handling
-          # and broke esbuild's build script in CI.
-          version: 11.5.0
+          # Floating 11.x (not pinned): an exact version makes action-setup use
+          # standalone mode, which doesn't set npm_config_user_agent and trips the
+          # root preinstall guard. esbuild's build script is allowed for 11.9.0+
+          # via `allowBuilds` in pnpm-workspace.yaml.
+          version: 11
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -71,10 +72,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:
-          # Pinned to the exact pnpm that generated pnpm-lock.yaml. Floating to
-          # the latest 11.x (e.g. 11.9.0) changed onlyBuiltDependencies handling
-          # and broke esbuild's build script in CI.
-          version: 11.5.0
+          # Floating 11.x (not pinned): an exact version makes action-setup use
+          # standalone mode, which doesn't set npm_config_user_agent and trips the
+          # root preinstall guard. esbuild's build script is allowed for 11.9.0+
+          # via `allowBuilds` in pnpm-workspace.yaml.
+          version: 11
       - uses: actions/setup-node@v4
         with:
           node-version: 24
