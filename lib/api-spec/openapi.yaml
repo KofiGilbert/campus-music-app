@@ -185,11 +185,48 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /auth/refresh:
+    post:
+      operationId: refresh
+      tags: [auth]
+      summary: Rotate a refresh token for a new access + refresh token pair
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshBody"
+      responses:
+        "200":
+          description: Rotated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RefreshResponse"
+        "400":
+          description: Missing refresh token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Invalid, expired, or reused refresh token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /auth/logout:
     post:
       operationId: logout
       tags: [auth]
-      summary: Logout
+      summary: Logout — revokes the presented refresh token's family
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshBody"
       responses:
         "200":
           description: Logged out
@@ -197,6 +234,56 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/LogoutResponse"
+
+  /auth/password/forgot:
+    post:
+      operationId: forgotPassword
+      tags: [auth]
+      summary: Request a password reset email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ForgotPasswordBody"
+      responses:
+        "200":
+          description: Always succeeds (does not reveal whether the email exists)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ForgotPasswordResponse"
+        "400":
+          description: Missing email
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/password/reset:
+    post:
+      operationId: resetPassword
+      tags: [auth]
+      summary: Reset a password using a reset token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResetPasswordBody"
+      responses:
+        "200":
+          description: Password reset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResetPasswordResponse"
+        "400":
+          description: Invalid/expired token or weak password
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /auth/me:
     get:
@@ -1160,11 +1247,41 @@ components:
       properties:
         token:
           type: string
+          description: Legacy alias for accessToken; removed once clients migrate.
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
         user:
           $ref: "#/components/schemas/UserProfile"
       required:
         - token
+        - accessToken
+        - refreshToken
         - user
+
+    RefreshBody:
+      type: object
+      properties:
+        refreshToken:
+          type: string
+      required:
+        - refreshToken
+
+    RefreshResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: Legacy alias for accessToken.
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+      required:
+        - token
+        - accessToken
+        - refreshToken
 
     LogoutResponse:
       type: object
@@ -1173,6 +1290,41 @@ components:
           type: string
       required:
         - message
+
+    ForgotPasswordBody:
+      type: object
+      properties:
+        email:
+          type: string
+      required:
+        - email
+
+    ForgotPasswordResponse:
+      type: object
+      properties:
+        sent:
+          type: boolean
+      required:
+        - sent
+
+    ResetPasswordBody:
+      type: object
+      properties:
+        token:
+          type: string
+        newPassword:
+          type: string
+      required:
+        - token
+        - newPassword
+
+    ResetPasswordResponse:
+      type: object
+      properties:
+        reset:
+          type: boolean
+      required:
+        - reset
 
     UserProfile:
       type: object
@@ -1193,6 +1345,8 @@ components:
         avatarUrl:
           type: string
           nullable: true
+        emailVerified:
+          type: boolean
       required:
         - id
         - email
@@ -1200,6 +1354,7 @@ components:
         - role
         - university
         - country
+        - emailVerified
 
     LikeBody:
       type: object

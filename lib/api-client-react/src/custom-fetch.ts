@@ -44,6 +44,31 @@ export function setAuthTokenGetter(getter: AuthTokenGetter | null): void {
   _authTokenGetter = getter;
 }
 
+/**
+ * Refresh handler invoked when an authenticated request returns 401. It should
+ * exchange the stored refresh token for a new access token (persisting both),
+ * returning the new access token to retry with, or null to give up (sign out).
+ * Opt-in: clients that don't register one (e.g. cookie-based web) keep the old
+ * behaviour of surfacing the 401. Pass `null` to clear.
+ */
+export type RefreshHandler = () => Promise<string | null>;
+
+let _refreshHandler: RefreshHandler | null = null;
+let _refreshInFlight: Promise<string | null> | null = null;
+
+export function setRefreshHandler(handler: RefreshHandler | null): void {
+  _refreshHandler = handler;
+}
+
+// De-dupe concurrent refreshes: a burst of 401s shares one refresh round-trip.
+function refreshOnce(): Promise<string | null> {
+  if (!_refreshHandler) return Promise.resolve(null);
+  _refreshInFlight ??= Promise.resolve(_refreshHandler()).finally(() => {
+    _refreshInFlight = null;
+  });
+  return _refreshInFlight;
+}
+
 function isRequest(input: RequestInfo | URL): input is Request {
   return typeof Request !== "undefined" && input instanceof Request;
 }
@@ -360,7 +385,23 @@ export async function customFetch<T = unknown>(
 
   const requestInfo = { method, url: resolveUrl(input) };
 
-  const response = await fetch(input, { ...init, method, headers });
+  let response = await fetch(input, { ...init, method, headers });
+
+  // On a 401 for an authenticated request, try a single token refresh + retry.
+  // Skip the refresh endpoint itself (no recursion) and requests that carried no
+  // bearer token (a 401 there means bad credentials, not an expired token).
+  if (
+    response.status === 401 &&
+    _refreshHandler &&
+    headers.has("authorization") &&
+    !requestInfo.url.includes("/auth/refresh")
+  ) {
+    const newToken = await refreshOnce();
+    if (newToken) {
+      headers.set("authorization", `Bearer ${newToken}`);
+      response = await fetch(input, { ...init, method, headers });
+    }
+  }
 
   if (!response.ok) {
     const errorData = await parseErrorBody(response, method);

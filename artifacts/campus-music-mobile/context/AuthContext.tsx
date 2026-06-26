@@ -1,13 +1,28 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
-import { setAuthTokenGetter, setBaseUrl, getMe } from "@workspace/api-client-react";
-import { ApiError } from "@workspace/api-client-react";
-import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
+import {
+  setAuthTokenGetter,
+  setBaseUrl,
+  setRefreshHandler,
+  getMe,
+  refresh as refreshTokens,
+  logout as logoutRequest,
+  ApiError,
+} from "@workspace/api-client-react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { Platform } from "react-native";
 import { resolveApiBaseUrl } from "@/constants/config";
 
 const AUTH_KEY = "campus_music_auth";
 const TOKEN_KEY = "campus_music_token";
+const REFRESH_KEY = "campus_music_refresh_token";
 
 // Configure where API requests are sent. Handles both local development
 // (EXPO_PUBLIC_API_URL, web + native) and the Replit preview (EXPO_PUBLIC_DOMAIN,
@@ -46,6 +61,29 @@ export interface AuthUser {
   university: string;
   country: string;
   avatarUrl?: string | null;
+  emailVerified: boolean;
+}
+
+function toAuthUser(u: {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  university: string;
+  country: string;
+  avatarUrl?: string | null;
+  emailVerified: boolean;
+}): AuthUser {
+  return {
+    id: u.id,
+    name: u.name,
+    email: u.email,
+    role: u.role as "listener" | "artist",
+    university: u.university,
+    country: u.country,
+    avatarUrl: u.avatarUrl ?? null,
+    emailVerified: u.emailVerified,
+  };
 }
 
 interface AuthContextType {
@@ -53,7 +91,7 @@ interface AuthContextType {
   token: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  signIn: (user: AuthUser, token: string) => Promise<void>;
+  signIn: (user: AuthUser, accessToken: string, refreshToken: string) => Promise<void>;
   signOut: () => Promise<void>;
   updateUser: (partial: Partial<AuthUser>) => void;
 }
@@ -62,85 +100,133 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [token, setToken] = useState<string | null>(null);
+  const [token, setTokenState] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Live token refs so the auth-token getter + refresh handler (registered once)
+  // always read the current values across rotations.
+  const tokenRef = useRef<string | null>(null);
+  const refreshRef = useRef<string | null>(null);
+
+  const setAccessToken = useCallback((t: string | null) => {
+    tokenRef.current = t;
+    setTokenState(t);
+  }, []);
+
+  // Clear all session state + storage locally (no network call).
+  const clearSession = useCallback(async () => {
+    setUser(null);
+    setAccessToken(null);
+    refreshRef.current = null;
+    try {
+      await Promise.all([
+        AsyncStorage.removeItem(AUTH_KEY),
+        secureDeleteItem(TOKEN_KEY),
+        secureDeleteItem(REFRESH_KEY),
+      ]);
+    } catch {}
+  }, [setAccessToken]);
+
+  // Register the bearer-token getter and the 401 refresh handler once. The
+  // handler rotates the stored refresh token, persists the new pair, and returns
+  // the new access token to retry with — or signs out if rotation fails.
+  useEffect(() => {
+    setAuthTokenGetter(() => tokenRef.current);
+    setRefreshHandler(async () => {
+      const rt = refreshRef.current;
+      if (!rt) return null;
+      try {
+        const result = await refreshTokens({ refreshToken: rt });
+        setAccessToken(result.accessToken);
+        refreshRef.current = result.refreshToken;
+        await Promise.all([
+          secureSetItem(TOKEN_KEY, result.accessToken),
+          secureSetItem(REFRESH_KEY, result.refreshToken),
+        ]);
+        return result.accessToken;
+      } catch {
+        await clearSession();
+        return null;
+      }
+    });
+    return () => {
+      setAuthTokenGetter(null);
+      setRefreshHandler(null);
+    };
+  }, [setAccessToken, clearSession]);
+
+  // Restore a stored session on launch.
   useEffect(() => {
     (async () => {
       try {
-        const [storedUser, storedToken] = await Promise.all([
+        const [storedUser, storedToken, storedRefresh] = await Promise.all([
           AsyncStorage.getItem(AUTH_KEY),
           secureGetItem(TOKEN_KEY),
+          secureGetItem(REFRESH_KEY),
         ]);
 
-        if (storedToken) {
-          setToken(storedToken);
-          setAuthTokenGetter(() => storedToken);
+        if (storedRefresh) refreshRef.current = storedRefresh;
 
+        if (storedToken) {
+          setAccessToken(storedToken);
           try {
+            // getMe benefits from the 401 interceptor: an expired access token is
+            // transparently refreshed before this resolves.
             const freshUser = await Promise.race([
               getMe(),
               new Promise<never>((_, reject) =>
                 setTimeout(() => reject(new Error("getMe timed out")), 8000),
               ),
             ]);
-            const authUser: AuthUser = {
-              id: freshUser.id,
-              name: freshUser.name,
-              email: freshUser.email,
-              role: freshUser.role as "listener" | "artist",
-              university: freshUser.university,
-              country: freshUser.country,
-              avatarUrl: freshUser.avatarUrl ?? null,
-            };
+            const authUser = toAuthUser(freshUser);
             setUser(authUser);
             await AsyncStorage.setItem(AUTH_KEY, JSON.stringify(authUser));
           } catch (err: unknown) {
-            const isAuthError = err instanceof ApiError && (err as ApiError).status === 401;
+            const isAuthError = err instanceof ApiError && err.status === 401;
             if (isAuthError) {
-              // Token is invalid or expired — clear the session
-              setToken(null);
-              setAuthTokenGetter(null);
-              await Promise.all([
-                AsyncStorage.removeItem(AUTH_KEY),
-                secureDeleteItem(TOKEN_KEY),
-              ]);
-            } else {
-              // Transient network error — keep cached user to allow offline access
-              if (storedUser) setUser(JSON.parse(storedUser));
+              // Still 401 after a refresh attempt — the session is dead.
+              await clearSession();
+            } else if (storedUser) {
+              // Transient network error — keep the cached user for offline access.
+              setUser(JSON.parse(storedUser));
             }
           }
         } else if (storedUser) {
           setUser(JSON.parse(storedUser));
         }
-      } catch {}
-      finally { setIsLoading(false); }
+      } catch {
+      } finally {
+        setIsLoading(false);
+      }
     })();
-  }, []);
+  }, [setAccessToken, clearSession]);
 
-  const signIn = useCallback(async (u: AuthUser, t: string) => {
-    setUser(u);
-    setToken(t);
-    setAuthTokenGetter(() => t);
-    try {
-      await Promise.all([
-        AsyncStorage.setItem(AUTH_KEY, JSON.stringify(u)),
-        secureSetItem(TOKEN_KEY, t),
-      ]);
-    } catch {}
-  }, []);
+  const signIn = useCallback(
+    async (u: AuthUser, accessToken: string, refreshToken: string) => {
+      setUser(u);
+      setAccessToken(accessToken);
+      refreshRef.current = refreshToken;
+      try {
+        await Promise.all([
+          AsyncStorage.setItem(AUTH_KEY, JSON.stringify(u)),
+          secureSetItem(TOKEN_KEY, accessToken),
+          secureSetItem(REFRESH_KEY, refreshToken),
+        ]);
+      } catch {}
+    },
+    [setAccessToken],
+  );
 
   const signOut = useCallback(async () => {
-    setUser(null);
-    setToken(null);
-    setAuthTokenGetter(null);
-    try {
-      await Promise.all([
-        AsyncStorage.removeItem(AUTH_KEY),
-        secureDeleteItem(TOKEN_KEY),
-      ]);
-    } catch {}
-  }, []);
+    const rt = refreshRef.current;
+    if (rt) {
+      // Best-effort server-side revocation of the refresh-token family.
+      try {
+        await logoutRequest({ refreshToken: rt });
+      } catch {}
+    }
+    await clearSession();
+  }, [clearSession]);
 
   const updateUser = useCallback((partial: Partial<AuthUser>) => {
     setUser((prev) => {
@@ -152,15 +238,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{
-      user,
-      token,
-      isLoading,
-      isAuthenticated: !!user,
-      signIn,
-      signOut,
-      updateUser,
-    }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        token,
+        isLoading,
+        isAuthenticated: !!user,
+        signIn,
+        signOut,
+        updateUser,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

@@ -23,6 +23,7 @@ export const users = campusMusic.table(
     // System (seeded a1..a10) + admin flags; timestamps.
     isSystem: boolean("is_system").notNull().default(false),
     isAdmin: boolean("is_admin").notNull().default(false),
+    emailVerified: boolean("email_verified").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

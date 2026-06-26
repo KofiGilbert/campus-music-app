@@ -4,8 +4,7 @@ import React, { useState } from "react";
 import { ActivityIndicator, Alert, FlatList, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
-import { register, getArtists, followArtist, setAuthTokenGetter } from "@workspace/api-client-react";
-import { useAuth } from "@/context/AuthContext";
+import { getArtists, followArtist } from "@workspace/api-client-react";
 import { useRegistration } from "@/context/RegistrationContext";
 import { useColors } from "@/hooks/useColors";
 
@@ -39,8 +38,7 @@ export default function FollowScreen() {
   const insets = useSafeAreaInsets();
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 34 : insets.bottom;
-  const { signIn } = useAuth();
-  const { draft, clearDraft } = useRegistration();
+  const { clearDraft } = useRegistration();
   const [followed, setFollowed] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(false);
 
@@ -69,46 +67,22 @@ export default function FollowScreen() {
     });
   };
 
+  // The account was created + signed in on the OTP screen, so this step just
+  // persists follow selections and finishes onboarding.
   const handleDone = async () => {
     if (isLoading) return;
     setIsLoading(true);
     try {
-      const { email, password, name, role, university, country } = draft;
-      if (!email || !password || !name || !role || !university || !country) {
-        Alert.alert("Missing info", "Please complete all registration steps.");
-        setIsLoading(false);
-        return;
-      }
-
-      const result = await register({ email, password, name, role, university, country });
-
-      // Wire the token so authenticated follow calls work immediately
-      setAuthTokenGetter(() => result.token);
-
-      // Persist follow selections before signing in so the feed is personalized on first load
       if (followed.size > 0) {
         await Promise.allSettled(
-          [...followed].map((id) => followArtist(id, { following: true }))
+          [...followed].map((id) => followArtist(id, { following: true })),
         );
       }
-
-      await signIn(
-        {
-          id: result.user.id,
-          name: result.user.name,
-          email: result.user.email,
-          role: result.user.role as "listener" | "artist",
-          university: result.user.university,
-          country: result.user.country,
-        },
-        result.token
-      );
-
       clearDraft();
       router.replace("/(tabs)");
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Registration failed. Please try again.";
-      Alert.alert("Registration failed", msg);
+      const msg = err instanceof Error ? err.message : "Something went wrong. Please try again.";
+      Alert.alert("Error", msg);
     } finally {
       setIsLoading(false);
     }
@@ -161,7 +135,7 @@ export default function FollowScreen() {
             <ActivityIndicator color="#fff" />
           ) : (
             <Text style={styles.btnText}>
-              {followed.size > 0 ? `Follow ${followed.size} & Create Account` : "Create Account"}
+              {followed.size > 0 ? `Follow ${followed.size} & Finish` : "Finish"}
             </Text>
           )}
         </Pressable>

@@ -9,8 +9,7 @@ export interface HealthStatus {
   status: string;
 }
 
-export type RegisterBodyRole =
-  (typeof RegisterBodyRole)[keyof typeof RegisterBodyRole];
+export type RegisterBodyRole = (typeof RegisterBodyRole)[keyof typeof RegisterBodyRole];
 
 export const RegisterBodyRole = {
   listener: "listener",
@@ -31,8 +30,7 @@ export interface LoginBody {
   password: string;
 }
 
-export type UserProfileRole =
-  (typeof UserProfileRole)[keyof typeof UserProfileRole];
+export type UserProfileRole = (typeof UserProfileRole)[keyof typeof UserProfileRole];
 
 export const UserProfileRole = {
   listener: "listener",
@@ -47,15 +45,47 @@ export interface UserProfile {
   university: string;
   country: string;
   avatarUrl?: string | null;
+  emailVerified: boolean;
 }
 
 export interface AuthResponse {
+  /** Legacy alias for accessToken; removed once clients migrate. */
   token: string;
+  accessToken: string;
+  refreshToken: string;
   user: UserProfile;
+}
+
+export interface RefreshBody {
+  refreshToken: string;
+}
+
+export interface RefreshResponse {
+  /** Legacy alias for accessToken. */
+  token: string;
+  accessToken: string;
+  refreshToken: string;
 }
 
 export interface LogoutResponse {
   message: string;
+}
+
+export interface ForgotPasswordBody {
+  email: string;
+}
+
+export interface ForgotPasswordResponse {
+  sent: boolean;
+}
+
+export interface ResetPasswordBody {
+  token: string;
+  newPassword: string;
+}
+
+export interface ResetPasswordResponse {
+  reset: boolean;
 }
 
 export interface LikeBody {
@@ -127,8 +157,7 @@ export interface SearchResults {
   artists: Artist[];
 }
 
-export type PublicProfileRole =
-  (typeof PublicProfileRole)[keyof typeof PublicProfileRole];
+export type PublicProfileRole = (typeof PublicProfileRole)[keyof typeof PublicProfileRole];
 
 export const PublicProfileRole = {
   listener: "listener",
@@ -146,8 +175,7 @@ export interface PublicProfile {
   tracks: Track[];
 }
 
-export type ConnectionUserStatus =
-  (typeof ConnectionUserStatus)[keyof typeof ConnectionUserStatus];
+export type ConnectionUserStatus = (typeof ConnectionUserStatus)[keyof typeof ConnectionUserStatus];
 
 export const ConnectionUserStatus = {
   none: "none",
@@ -350,8 +378,7 @@ export type GetConnectionsParams = {
   type?: GetConnectionsType;
 };
 
-export type GetConnectionsType =
-  (typeof GetConnectionsType)[keyof typeof GetConnectionsType];
+export type GetConnectionsType = (typeof GetConnectionsType)[keyof typeof GetConnectionsType];
 
 export const GetConnectionsType = {
   discover: "discover",

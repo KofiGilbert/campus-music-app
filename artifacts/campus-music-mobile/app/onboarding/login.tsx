@@ -46,8 +46,11 @@ export default function LoginScreen() {
           role: result.user.role as "listener" | "artist",
           university: result.user.university,
           country: result.user.country,
+          avatarUrl: result.user.avatarUrl ?? null,
+          emailVerified: result.user.emailVerified,
         },
-        result.token
+        result.accessToken,
+        result.refreshToken,
       );
       router.replace("/(tabs)");
     } catch {
@@ -107,6 +110,14 @@ export default function LoginScreen() {
           </Pressable>
         </View>
 
+        <Pressable
+          style={styles.forgotLink}
+          onPress={() => router.push("/onboarding/forgot-password")}
+          hitSlop={8}
+        >
+          <Text style={[styles.forgotText, { color: colors.primary }]}>Forgot password?</Text>
+        </Pressable>
+
         <View style={{ flex: 1 }} />
 
         <Pressable
@@ -147,6 +158,8 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   input: { flex: 1, fontSize: 16 },
+  forgotLink: { alignSelf: "flex-end", paddingVertical: 12 },
+  forgotText: { fontSize: 14, fontWeight: "600" },
   btn: { height: 54, borderRadius: 27, alignItems: "center", justifyContent: "center", marginBottom: 16 },
   btnText: { fontSize: 17, fontWeight: "700" },
   signupLink: { alignItems: "center", paddingVertical: 8 },

@@ -2,11 +2,23 @@ import { Router, type IRouter } from "express";
 import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { db, users } from "@workspace/db";
+import { emailService, passwordResetEmailTemplate } from "@workspace/email";
 import { signToken } from "../lib/jwt";
+import {
+  issueRefreshToken,
+  rotateRefreshToken,
+  revokeRefreshTokenFamily,
+  revokeAllUserRefreshTokens,
+} from "../lib/refreshTokens";
+import { createPasswordResetToken, consumePasswordResetToken } from "../lib/passwordReset";
 import { requireAuth } from "../middlewares/auth";
 import { authLimiter } from "../middlewares/rateLimit";
 
 const router: IRouter = Router();
+
+// Base URL for links in emails (password reset). Points at the app's deep-link
+// / web handler for /reset-password.
+const APP_BASE_URL = process.env.APP_BASE_URL ?? "https://campus-music.app";
 
 // authLimiter is attached PER-ROUTE below, not via router.use(). These routers
 // are mounted without a path prefix, so a router-level limiter would fire for
@@ -24,6 +36,7 @@ function buildUserResponse(user: {
   university: string | null;
   country: string | null;
   avatarUrl?: string | null;
+  emailVerified: boolean;
 }) {
   return {
     id: user.id,
@@ -33,6 +46,7 @@ function buildUserResponse(user: {
     university: user.university ?? "",
     country: user.country ?? "",
     avatarUrl: user.avatarUrl ?? null,
+    emailVerified: user.emailVerified,
   };
 }
 
@@ -87,15 +101,23 @@ async function registerUser(
     })
     .returning();
 
-  const token = await signToken({
+  const accessToken = await signToken({
     sub: newUser.id,
     role: newUser.role,
     isAdmin: newUser.isAdmin,
     isSystem: newUser.isSystem,
   });
+  const refreshToken = await issueRefreshToken(newUser.id);
   req.log.info({ userId: newUser.id }, "User registered");
 
-  res.status(201).json({ token, user: buildUserResponse(newUser) });
+  // `token` is a legacy alias for `accessToken` kept until the mobile client
+  // migrates to the access/refresh pair.
+  res.status(201).json({
+    token: accessToken,
+    accessToken,
+    refreshToken,
+    user: buildUserResponse(newUser),
+  });
 }
 
 router.post("/auth/register", authLimiter, async (req, res): Promise<void> => {
@@ -138,19 +160,135 @@ router.post("/auth/login", authLimiter, async (req, res): Promise<void> => {
     return;
   }
 
-  const token = await signToken({
+  const accessToken = await signToken({
     sub: user.id,
     role: user.role,
     isAdmin: user.isAdmin,
     isSystem: user.isSystem,
   });
+  const refreshToken = await issueRefreshToken(user.id);
   req.log.info({ userId: user.id }, "User logged in");
 
-  res.json({ token, user: buildUserResponse(user) });
+  res.json({
+    token: accessToken, // legacy alias, see registerUser
+    accessToken,
+    refreshToken,
+    user: buildUserResponse(user),
+  });
 });
 
-router.post("/auth/logout", (_req, res): void => {
+/**
+ * POST /auth/refresh — rotate a refresh token. Returns a fresh access token and
+ * a new refresh token (the old one is revoked). Not rate-limited: it's a
+ * high-frequency legitimate call already gated by possession of a 32-byte random
+ * token, and reuse detection handles theft. Access-token claims are re-read from
+ * the user's row, so role/admin changes propagate within one refresh.
+ */
+router.post("/auth/refresh", async (req, res): Promise<void> => {
+  const { refreshToken } = req.body as { refreshToken?: unknown };
+  if (typeof refreshToken !== "string" || !refreshToken) {
+    res.status(400).json({ error: "refreshToken is required" });
+    return;
+  }
+
+  const result = await rotateRefreshToken(refreshToken);
+  if (!result.ok) {
+    res.status(401).json({ error: "Invalid refresh token" });
+    return;
+  }
+
+  const [user] = await db.select().from(users).where(eq(users.id, result.userId)).limit(1);
+  if (!user) {
+    res.status(401).json({ error: "Invalid refresh token" });
+    return;
+  }
+
+  const accessToken = await signToken({
+    sub: user.id,
+    role: user.role,
+    isAdmin: user.isAdmin,
+    isSystem: user.isSystem,
+  });
+  res.json({ token: accessToken, accessToken, refreshToken: result.token });
+});
+
+/**
+ * POST /auth/logout — revokes the entire refresh-token family the presented
+ * token belongs to (signs the session out on this device). Idempotent: a missing
+ * or unknown token still returns success.
+ */
+router.post("/auth/logout", async (req, res): Promise<void> => {
+  const { refreshToken } = req.body as { refreshToken?: unknown };
+  if (typeof refreshToken === "string" && refreshToken) {
+    await revokeRefreshTokenFamily(refreshToken);
+  }
   res.json({ message: "Logged out successfully" });
+});
+
+/**
+ * POST /auth/password/forgot — start a password reset. Always responds
+ * { sent: true } whether or not the email exists, so it can't be used to probe
+ * which emails are registered. System accounts (which can't log in) are skipped.
+ */
+router.post("/auth/password/forgot", authLimiter, async (req, res): Promise<void> => {
+  const { email } = req.body as { email?: unknown };
+  if (typeof email !== "string" || !email) {
+    res.status(400).json({ error: "Email is required" });
+    return;
+  }
+
+  const [user] = await db
+    .select({ id: users.id, isSystem: users.isSystem })
+    .from(users)
+    .where(eq(users.email, email))
+    .limit(1);
+
+  if (user && !user.isSystem) {
+    const token = await createPasswordResetToken(user.id);
+    const template = passwordResetEmailTemplate(`${APP_BASE_URL}/reset-password?token=${token}`);
+    try {
+      await emailService.sendEmail({ to: email, ...template });
+    } catch (err) {
+      // Don't fail the request (or leak failure) if the provider hiccups.
+      req.log.error({ err }, "Failed to send password reset email");
+    }
+  }
+
+  res.json({ sent: true });
+});
+
+/**
+ * POST /auth/password/reset — complete a password reset. Consumes a valid
+ * (unexpired, unused) token, sets the new password, and revokes every refresh
+ * token for the user so all existing sessions are signed out.
+ */
+router.post("/auth/password/reset", authLimiter, async (req, res): Promise<void> => {
+  const { token, newPassword } = req.body as { token?: unknown; newPassword?: unknown };
+  if (
+    typeof token !== "string" ||
+    !token ||
+    typeof newPassword !== "string" ||
+    newPassword.length < 6
+  ) {
+    res.status(400).json({ error: "A token and a password (min 6 characters) are required" });
+    return;
+  }
+
+  const userId = await consumePasswordResetToken(token);
+  if (!userId) {
+    res.status(400).json({ error: "Invalid or expired reset token" });
+    return;
+  }
+
+  const hashedPassword = await bcrypt.hash(newPassword, 10);
+  await db
+    .update(users)
+    .set({ password: hashedPassword, updatedAt: new Date() })
+    .where(eq(users.id, userId));
+  await revokeAllUserRefreshTokens(userId);
+
+  req.log.info({ userId }, "Password reset");
+  res.json({ reset: true });
 });
 
 router.get("/auth/me", requireAuth, async (req, res): Promise<void> => {

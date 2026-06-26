@@ -14,6 +14,9 @@ export default function OnboardingLayout() {
       <Stack.Screen name="otp" />
       <Stack.Screen name="notifications" />
       <Stack.Screen name="follow" />
+      <Stack.Screen name="login" />
+      <Stack.Screen name="forgot-password" />
+      <Stack.Screen name="reset-password" />
     </Stack>
   );
 }

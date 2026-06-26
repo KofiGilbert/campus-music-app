@@ -11,6 +11,9 @@
       "path": "../../lib/db"
     },
     {
+      "path": "../../lib/email"
+    },
+    {
       "path": "../../lib/api-zod"
     }
   ]

@@ -1,0 +1,15 @@
+{
+  "name": "@workspace/email",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "resend": "^6"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:"
+  }
+}
