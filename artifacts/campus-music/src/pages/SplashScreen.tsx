@@ -5,7 +5,7 @@ const splashLogo = {
   src: "/figmaAssets/campus-music-logo-1.png",
 };
 
-export const SplashScreen = (): JSX.Element => {
+export const SplashScreen = () => {
   return (
     <main className="flex min-h-screen w-full items-center justify-center bg-[#e9e9e9] px-6">
       <Card className="h-auto border-0 bg-transparent shadow-none">

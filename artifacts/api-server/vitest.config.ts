@@ -6,6 +6,9 @@ export default defineConfig({
     include: ["src/**/*.test.ts"],
     env: {
       NODE_ENV: "test",
+      // Deterministic signing key so tests can forge tokens with the same secret
+      // jwt.ts uses (rather than relying on the dev fallback string).
+      JWT_SECRET: "test-only-secret-not-for-production",
       // NB: the auth rate-limit budget is intentionally NOT set globally here.
       // A low global limit would hand surprise 429s to any future happy-path
       // test that makes several auth calls (register → login → me, etc.). The

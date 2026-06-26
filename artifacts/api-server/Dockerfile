@@ -1,10 +1,10 @@
 # syntax=docker/dockerfile:1
 #
 # API server image for Fly.io. Multi-stage: build the esbuild bundle in a full
-# workspace, then ship a pruned, production-only deploy.
+# workspace, then ship a pruned, production-only deploy that runs as non-root.
 #
-# NOTE (Phase 0): not yet built/deployed — no Docker available in the dev box and
-# the Fly app has no payment method yet (deploy blocked). Reviewed as IaC; will be
+# NOTE (Phase 0): not yet built/deployed — no Docker on the dev box and the Fly
+# app has no payment method yet (deploy blocked). Reviewed as IaC; will be
 # verified with `fly deploy` once billing is enabled.
 
 # ---- Builder ----------------------------------------------------------------
@@ -14,9 +14,15 @@ ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
 WORKDIR /repo
 
-# Install with a frozen lockfile for reproducible builds.
+# Dependency layer first, keyed only on the lockfile + workspace manifest so it
+# stays cached across source-only changes. `pnpm fetch` populates the store from
+# the lockfile alone (it needs neither package.json files nor source).
+COPY pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm fetch
+
+# Now bring in the full workspace and install offline from the fetched store.
 COPY . .
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --offline
 
 # Build the api-server bundle (esbuild -> dist/index.mjs).
 RUN pnpm --filter @workspace/api-server run build
@@ -30,7 +36,10 @@ WORKDIR /app
 ENV NODE_ENV=production
 # PORT is provided by Fly (fly.toml [env]); the server reads process.env.PORT.
 
-COPY --from=builder /app /app
+# Copy the pruned deploy as the unprivileged `node` user (present in the base
+# image) and drop root for the runtime.
+COPY --from=builder --chown=node:node /app /app
+USER node
 
 EXPOSE 8080
 CMD ["node", "--enable-source-maps", "dist/index.mjs"]
