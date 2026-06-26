@@ -820,6 +820,178 @@ export const ToggleCommentLikeResponse = zod.object({
 });
 
 /**
+ * @summary Open (or reuse) a 1:1 DM with another user
+ */
+export const CreateConversationBody = zod.object({
+  userId: zod.string(),
+});
+
+/**
+ * @summary List my conversations (newest activity first)
+ */
+export const GetConversationsQueryParams = zod.object({
+  limit: zod.coerce.number().optional(),
+  cursor: zod.coerce.string().optional(),
+});
+
+export const GetConversationsResponse = zod.object({
+  items: zod.array(
+    zod.object({
+      id: zod.string(),
+      type: zod.string(),
+      participants: zod.array(
+        zod.object({
+          id: zod.string(),
+          username: zod.string(),
+          name: zod.string(),
+          avatarUrl: zod.string().nullish(),
+          role: zod.string(),
+        }),
+      ),
+      lastMessage: zod
+        .union([
+          zod.object({
+            id: zod.string(),
+            conversationId: zod.string(),
+            sender: zod
+              .union([
+                zod.object({
+                  id: zod.string(),
+                  username: zod.string(),
+                  name: zod.string(),
+                  avatarUrl: zod.string().nullish(),
+                  role: zod.string(),
+                }),
+                zod.null(),
+              ])
+              .optional(),
+            body: zod.string(),
+            attachedTrack: zod
+              .union([
+                zod.object({
+                  id: zod.string(),
+                  title: zod.string(),
+                  artist: zod.string(),
+                  artistId: zod.string(),
+                  genre: zod.string(),
+                  duration: zod.string(),
+                  durationSeconds: zod.number(),
+                  coverColor: zod.string(),
+                  audioUrl: zod.string().nullable(),
+                  coverUrl: zod.string().nullable(),
+                  playCount: zod.number(),
+                  likes: zod.number(),
+                  university: zod.string().nullable(),
+                  audioUrls: zod.record(zod.string(), zod.string()).nullish(),
+                  coverUrls: zod.record(zod.string(), zod.string()).nullish(),
+                  stemUrls: zod.record(zod.string(), zod.string()).nullish(),
+                  processingStatus: zod
+                    .enum(["pending", "processing", "ready", "failed"])
+                    .optional(),
+                }),
+                zod.null(),
+              ])
+              .optional(),
+            attachedImageUrl: zod.string().nullish(),
+            createdAt: zod.string(),
+          }),
+          zod.null(),
+        ])
+        .optional(),
+      unreadCount: zod.number(),
+      lastMessageAt: zod.string(),
+    }),
+  ),
+  nextCursor: zod.string().nullable(),
+});
+
+/**
+ * @summary Cursor-paginated messages in a conversation
+ */
+export const GetMessagesParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetMessagesQueryParams = zod.object({
+  limit: zod.coerce.number().optional(),
+  cursor: zod.coerce.string().optional(),
+});
+
+export const GetMessagesResponse = zod.object({
+  items: zod.array(
+    zod.object({
+      id: zod.string(),
+      conversationId: zod.string(),
+      sender: zod
+        .union([
+          zod.object({
+            id: zod.string(),
+            username: zod.string(),
+            name: zod.string(),
+            avatarUrl: zod.string().nullish(),
+            role: zod.string(),
+          }),
+          zod.null(),
+        ])
+        .optional(),
+      body: zod.string(),
+      attachedTrack: zod
+        .union([
+          zod.object({
+            id: zod.string(),
+            title: zod.string(),
+            artist: zod.string(),
+            artistId: zod.string(),
+            genre: zod.string(),
+            duration: zod.string(),
+            durationSeconds: zod.number(),
+            coverColor: zod.string(),
+            audioUrl: zod.string().nullable(),
+            coverUrl: zod.string().nullable(),
+            playCount: zod.number(),
+            likes: zod.number(),
+            university: zod.string().nullable(),
+            audioUrls: zod.record(zod.string(), zod.string()).nullish(),
+            coverUrls: zod.record(zod.string(), zod.string()).nullish(),
+            stemUrls: zod.record(zod.string(), zod.string()).nullish(),
+            processingStatus: zod.enum(["pending", "processing", "ready", "failed"]).optional(),
+          }),
+          zod.null(),
+        ])
+        .optional(),
+      attachedImageUrl: zod.string().nullish(),
+      createdAt: zod.string(),
+    }),
+  ),
+  nextCursor: zod.string().nullable(),
+});
+
+/**
+ * @summary Send a message (also delivered over the socket)
+ */
+export const SendMessageParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const SendMessageBody = zod.object({
+  body: zod.string().optional(),
+  attachedTrackId: zod.string().optional(),
+  attachedImageUrl: zod.string().optional(),
+});
+
+/**
+ * @summary Mark a conversation read up to now
+ */
+export const MarkConversationReadParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const MarkConversationReadResponse = zod.object({
+  ok: zod.boolean(),
+  lastReadAt: zod.string(),
+});
+
+/**
  * @summary Search tracks and artists
  */
 export const SearchQueryParams = zod.object({

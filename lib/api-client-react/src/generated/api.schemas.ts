@@ -291,6 +291,62 @@ export interface ShareResponse {
   deepLink: string;
 }
 
+export interface MessageSender {
+  id: string;
+  username: string;
+  name: string;
+  /** @nullable */
+  avatarUrl?: string | null;
+  role: string;
+}
+
+export interface Message {
+  id: string;
+  conversationId: string;
+  sender?: MessageSender | null;
+  body: string;
+  attachedTrack?: Track | null;
+  /** @nullable */
+  attachedImageUrl?: string | null;
+  createdAt: string;
+}
+
+export interface MessagesResponse {
+  items: Message[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
+export interface ConversationSummary {
+  id: string;
+  type: string;
+  participants: MessageSender[];
+  lastMessage?: Message | null;
+  unreadCount: number;
+  lastMessageAt: string;
+}
+
+export interface ConversationsResponse {
+  items: ConversationSummary[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
+export interface CreateConversationBody {
+  userId: string;
+}
+
+export interface SendMessageBody {
+  body?: string;
+  attachedTrackId?: string;
+  attachedImageUrl?: string;
+}
+
+export interface MarkReadResponse {
+  ok: boolean;
+  lastReadAt: string;
+}
+
 export interface Artist {
   id: string;
   name: string;
@@ -581,6 +637,16 @@ export const GetCommentsTargetType = {
   post: "post",
   track: "track",
 } as const;
+
+export type GetConversationsParams = {
+  limit?: number;
+  cursor?: string;
+};
+
+export type GetMessagesParams = {
+  limit?: number;
+  cursor?: string;
+};
 
 export type SearchParams = {
   /**

@@ -1138,6 +1138,136 @@ paths:
               schema:
                 $ref: "#/components/schemas/LikeToggleResponse"
 
+  /conversations:
+    post:
+      operationId: createConversation
+      tags: [messages]
+      summary: Open (or reuse) a 1:1 DM with another user
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateConversationBody"
+      responses:
+        "201":
+          description: Conversation summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationSummary"
+        "400":
+          description: Invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      operationId: getConversations
+      tags: [messages]
+      summary: List my conversations (newest activity first)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+        - in: query
+          name: cursor
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Conversations
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationsResponse"
+
+  /conversations/{id}/messages:
+    get:
+      operationId: getMessages
+      tags: [messages]
+      summary: Cursor-paginated messages in a conversation
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+        - in: query
+          name: limit
+          schema:
+            type: integer
+        - in: query
+          name: cursor
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Messages
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessagesResponse"
+    post:
+      operationId: sendMessage
+      tags: [messages]
+      summary: Send a message (also delivered over the socket)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendMessageBody"
+      responses:
+        "201":
+          description: Created message
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+        "400":
+          description: Invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /conversations/{id}/read:
+    post:
+      operationId: markConversationRead
+      tags: [messages]
+      summary: Mark a conversation read up to now
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Read receipt updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarkReadResponse"
+
   /search:
     get:
       operationId: search
@@ -2038,6 +2168,133 @@ components:
       required:
         - shareCount
         - deepLink
+
+    MessageSender:
+      type: object
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        name:
+          type: string
+        avatarUrl:
+          type: ["string", "null"]
+        role:
+          type: string
+      required:
+        - id
+        - username
+        - name
+        - role
+
+    Message:
+      type: object
+      properties:
+        id:
+          type: string
+        conversationId:
+          type: string
+        sender:
+          oneOf:
+            - $ref: "#/components/schemas/MessageSender"
+            - type: "null"
+        body:
+          type: string
+        attachedTrack:
+          oneOf:
+            - $ref: "#/components/schemas/Track"
+            - type: "null"
+        attachedImageUrl:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required:
+        - id
+        - conversationId
+        - body
+        - createdAt
+
+    MessagesResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Message"
+        nextCursor:
+          type: ["string", "null"]
+      required:
+        - items
+        - nextCursor
+
+    ConversationSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        participants:
+          type: array
+          items:
+            $ref: "#/components/schemas/MessageSender"
+        lastMessage:
+          oneOf:
+            - $ref: "#/components/schemas/Message"
+            - type: "null"
+        unreadCount:
+          type: integer
+        lastMessageAt:
+          type: string
+      required:
+        - id
+        - type
+        - participants
+        - unreadCount
+        - lastMessageAt
+
+    ConversationsResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConversationSummary"
+        nextCursor:
+          type: ["string", "null"]
+      required:
+        - items
+        - nextCursor
+
+    CreateConversationBody:
+      type: object
+      properties:
+        userId:
+          type: string
+      required:
+        - userId
+
+    SendMessageBody:
+      type: object
+      properties:
+        body:
+          type: string
+        attachedTrackId:
+          type: string
+        attachedImageUrl:
+          type: string
+
+    MarkReadResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        lastReadAt:
+          type: string
+      required:
+        - ok
+        - lastReadAt
 
     Artist:
       type: object
