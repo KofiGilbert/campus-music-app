@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { and, desc, eq, isNull, lt } from "drizzle-orm";
-import { db, comments, posts, tracks } from "@workspace/db";
+import { and, count, desc, eq, isNull, lt } from "drizzle-orm";
+import { db, comments, posts, tracks, commentLikes } from "@workspace/db";
 import { optionalAuth, requireAuth, requireVerified } from "../middlewares/auth";
 import { shapeComment, shapeComments } from "../lib/commentShape";
 
@@ -129,6 +129,46 @@ router.get("/comments", optionalAuth, async (req, res): Promise<void> => {
   const items = await shapeComments(page, req.userId ?? null, { withReplies: true });
   res.json({ items, nextCursor: hasMore ? page[page.length - 1].createdAt.toISOString() : null });
 });
+
+/** POST /comments/:id/like — toggle a comment like. Returns { liked, likeCount }. */
+router.post(
+  "/comments/:id/like",
+  requireAuth,
+  async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+    const userId = req.userId!;
+    const commentId = req.params.id;
+    const [comment] = await db
+      .select({ id: comments.id })
+      .from(comments)
+      .where(and(eq(comments.id, commentId), isNull(comments.deletedAt)))
+      .limit(1);
+    if (!comment) {
+      res.status(404).json({ error: "Comment not found" });
+      return;
+    }
+
+    const [existing] = await db
+      .select({ id: commentLikes.id })
+      .from(commentLikes)
+      .where(and(eq(commentLikes.commentId, commentId), eq(commentLikes.userId, userId)))
+      .limit(1);
+
+    let liked: boolean;
+    if (existing) {
+      await db.delete(commentLikes).where(eq(commentLikes.id, existing.id));
+      liked = false;
+    } else {
+      await db.insert(commentLikes).values({ commentId, userId }).onConflictDoNothing();
+      liked = true;
+    }
+
+    const [{ c }] = await db
+      .select({ c: count() })
+      .from(commentLikes)
+      .where(eq(commentLikes.commentId, commentId));
+    res.json({ liked, likeCount: c });
+  },
+);
 
 /** DELETE /comments/:id — soft delete, ownership-checked. */
 router.delete(

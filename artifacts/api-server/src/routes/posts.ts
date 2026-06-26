@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { and, desc, eq, isNull, lt } from "drizzle-orm";
-import { db, posts, tracks } from "@workspace/db";
+import { and, count, desc, eq, isNull, lt } from "drizzle-orm";
+import { db, posts, tracks, postLikes } from "@workspace/db";
 import { optionalAuth, requireAuth, requireVerified } from "../middlewares/auth";
 import { shapePost, shapePosts } from "../lib/postShape";
 
@@ -117,6 +117,43 @@ router.delete(
     }
     await db.update(posts).set({ deletedAt: new Date() }).where(eq(posts.id, post.id));
     res.status(204).send();
+  },
+);
+
+/** POST /posts/:id/like — toggle a like. Returns { liked, likeCount }. */
+router.post(
+  "/posts/:id/like",
+  requireAuth,
+  async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+    const userId = req.userId!;
+    const postId = req.params.id;
+    const [post] = await db
+      .select({ id: posts.id })
+      .from(posts)
+      .where(and(eq(posts.id, postId), isNull(posts.deletedAt)))
+      .limit(1);
+    if (!post) {
+      res.status(404).json({ error: "Post not found" });
+      return;
+    }
+
+    const [existing] = await db
+      .select({ id: postLikes.id })
+      .from(postLikes)
+      .where(and(eq(postLikes.postId, postId), eq(postLikes.userId, userId)))
+      .limit(1);
+
+    let liked: boolean;
+    if (existing) {
+      await db.delete(postLikes).where(eq(postLikes.id, existing.id));
+      liked = false;
+    } else {
+      await db.insert(postLikes).values({ postId, userId }).onConflictDoNothing();
+      liked = true;
+    }
+
+    const [{ c }] = await db.select({ c: count() }).from(postLikes).where(eq(postLikes.postId, postId));
+    res.json({ liked, likeCount: c });
   },
 );
 
