@@ -33,6 +33,10 @@ campus-music-app/
 │   ├── api-spec/                # OpenAPI spec (orval-generated client targets)
 │   ├── api-client-react/        # React-Query client generated from OpenAPI
 │   └── api-zod/                 # Zod schemas shared between client and server
+│   ├── storage/                 # StorageProvider interface + R2/Supabase/Memory adapters (Phase 2)
+│   └── email/                   # EmailService + Resend/Console adapters (Phase 1)
+├── apps/
+│   └── transcoder/              # Standalone Fly.io audio transcoding worker (Phase 2)
 ├── scripts/                     # Small TS scripts + post-merge hook
 ├── pnpm-workspace.yaml          # Workspace + catalog + Linux-only native overrides
 ├── .replit                      # Replit deployment + ports
@@ -46,16 +50,16 @@ campus-music-app/
 └── CONTRIBUTING.md                  # Contributor guide (Prettier rollout plan documented)
 ```
 
-**Tech stack:** Node 24, TypeScript 5.9, Drizzle 0.45, Express 5, React 19.1, Expo 54, React-Query, Tailwind v3/v4 (mixed), JWT via `jose`, bcryptjs, GCS via `@google-cloud/storage` + Replit sidecar.
+**Tech stack:** Node 24, TypeScript 5.9, Drizzle 0.45, Express 5, React 19.1, Expo 54, React-Query, Tailwind v3/v4 (mixed), JWT via `jose`, bcryptjs, R2 via `@aws-sdk/client-s3` + Supabase Storage for images (Phase 2 replaced GCS sidecar).
 
 ### 1.2 Database Schema (`lib/db/src/schema/`)
 
-All tables live in a dedicated `campus_music` Postgres schema. Seven tables total (the `artists` table was collapsed into `users` in Phase 0). Versioned SQL migrations checked into `lib/db/migrations/`; the post-merge hook runs `pnpm db:migrate`.
+All tables live in a dedicated `campus_music` Postgres schema. 17 tables total (after Phase 2 additions: `upload_jobs`, `play_history`, `track_skips`, and 6 AI foundation tables). The `artists` table was collapsed into `users` in Phase 0. Versioned SQL migrations checked into `lib/db/migrations/`; the post-merge hook runs `pnpm db:migrate`. `pgvector` extension enabled (Phase 2).
 
 | Table | Cols | Purpose | Notes |
 |---|---|---|---|
-| `users` | id, username, password, email, name, role(`listener`\|`artist`), university, country, avatarUrl, bio, genre, coverColor, is_admin, is_system, email_verified | Auth + profile + artist data | Artists collapsed into `users` (Phase 0 §3.5). `is_system` marks seed artists (sentinel password blocks login). `is_admin` baked into JWT claims. `email_verified` boolean added (Phase 1, default false). No `createdAt/updatedAt` yet. |
-| `tracks` | id, title, artist, artistId, genre, duration, durationSeconds, coverColor, audioUrl, coverUrl, playCount, university, createdAt, updatedAt | Music catalog | FK `artistId → users(id)` ON DELETE CASCADE. Indexes on `artist_id`, `created_at DESC`. |
+| `users` | id, username, password, email, name, role(`listener`\|`artist`), university, country, avatarUrl, bio, genre, coverColor, is_admin, is_system, email_verified, ai_credits, ai_consent | Auth + profile + artist data | Artists collapsed into `users` (Phase 0 §3.5). `is_system` marks seed artists (sentinel password blocks login). `is_admin` baked into JWT claims. `email_verified` boolean added (Phase 1, default false). `ai_credits` (integer, default 0) + `ai_consent` (jsonb, default '{}') added Phase 2. No `createdAt/updatedAt` yet. |
+| `tracks` | id, title, artist, artistId, genre, duration, durationSeconds, coverColor, audioUrl, coverUrl, audioUrls, coverUrls, stemUrls, processingStatus, playCount, university, createdAt, updatedAt | Music catalog | FK `artistId → users(id)` ON DELETE CASCADE. Indexes on `artist_id`, `created_at DESC`. Phase 2 added `audioUrls`/`coverUrls`/`stemUrls` (jsonb variant maps) + `processingStatus` (text, default 'ready'). |
 | `user_likes` | (userId, trackId) PK, createdAt | Track likes | FKs to `users(id)` + `tracks(id)` ON DELETE CASCADE |
 | `user_library` | (userId, trackId) PK | Saved-to-library | |
 | `artist_follows` | (userId, artistId, createdAt) PK | Artist follows | FKs to `users(id)` ON DELETE CASCADE |
@@ -63,6 +67,15 @@ All tables live in a dedicated `campus_music` Postgres schema. Seven tables tota
 | `user_playback` | userId PK, trackId, position, updatedAt, createdAt | Cross-device resume | FKs to `users(id)` + `tracks(id)` ON DELETE CASCADE. **Single row per user → no playback history** |
 | `refresh_tokens` | id (UUID PK), userId (FK), tokenHash, familyId, expiresAt, revokedAt, createdAt | Refresh-token rotation | Added Phase 1. SHA-256 hashed. Family-based reuse detection. 30-day TTL. Indexes on `token_hash`, `user_id`. |
 | `password_reset_tokens` | id (UUID PK), userId (FK), tokenHash, expiresAt, usedAt, createdAt | Password reset flow | Added Phase 1. 1-hour TTL. Single-use (atomic `usedAt` conditional update). Index on `token_hash`. |
+| `upload_jobs` | id (UUID PK), trackId (FK CASCADE), sourceKey, status, errorMessage, attempts, createdAt, startedAt, completedAt | Transcoder job queue | Added Phase 2. Worker polls pending jobs. Index on `(status, createdAt)`. |
+| `play_history` | id (UUID PK), userId (FK CASCADE), trackId (FK CASCADE), playedAt, secondsListened, completed, source, context | Per-listen telemetry | Added Phase 2. Indexes on `(userId, playedAt DESC)`, `(trackId, playedAt)`, `(playedAt)`. |
+| `track_skips` | id (UUID PK), userId (FK CASCADE), trackId (FK CASCADE), skippedAt, secondsBeforeSkip | Skip telemetry (negative signal) | Added Phase 2. Index on `(userId, trackId)`. |
+| `track_embeddings` | id (UUID PK), trackId (FK CASCADE, UNIQUE), embedding (vector 512), model, createdAt | CLAP audio embeddings | Added Phase 2 (schema only). HNSW cosine index. |
+| `lyrics_lines` | id (UUID PK), trackId (FK CASCADE), lineNumber, startMs, endMs, text, language | Structured synced lyrics | Added Phase 2 (schema only). Index on `(trackId, lineNumber)`. |
+| `lyrics_embeddings` | id (UUID PK), lyricsLineId (FK CASCADE), embedding (vector 1536), model, createdAt | Lyric text embeddings | Added Phase 2 (schema only). |
+| `ai_jobs` | id (UUID PK), type, trackId (FK SET NULL), userId (FK SET NULL), status, input, output, errorMessage, attempts, timestamps | AI job queue | Added Phase 2 (schema only). Index on `(status, createdAt)`. |
+| `ai_generations` | id (UUID PK), userId (FK SET NULL), feature, model, input, output, cost, createdAt | AI provenance/lineage | Added Phase 2 (schema only). Index on `(userId, createdAt DESC)`. |
+| `ai_credit_ledger` | id (UUID PK), userId (FK CASCADE), amount, reason, generationId (FK SET NULL), createdAt | AI credit ledger | Added Phase 2 (schema only). Index on `(userId, createdAt DESC)`. |
 
 **What's missing from the schema for an MVP that ships every feature already shown in the UI:**
 
@@ -70,7 +83,7 @@ All tables live in a dedicated `campus_music` Postgres schema. Seven tables tota
 - ❌ `comments` table (music-feed uses a hardcoded comment pool per track).
 - ❌ `post_likes` / `post_shares` / `post_reposts` tables.
 - ❌ `notifications` table + `push_tokens` table.
-- ❌ `play_history` (per-listen timestamped records; currently only a counter on `tracks.playCount`).
+- ✅ ~~`play_history`~~ — **Done (Phase 2).** `play_history` table with full Spotify-class data shape (userId, trackId, playedAt, secondsListened, completed, source, context). `track_skips` table for negative signal. Trending rewritten to 7-day rolling window.
 - ❌ `conversations` / `messages` / `message_reads` tables (Messages screen is fully hardcoded).
 - ❌ `live_sessions` + `live_session_participants` + `live_chat_messages` (Live Now is fully simulated).
 - ❌ `podcasts` + `podcast_episodes` (Campus Podcasts on Discover is hardcoded).
@@ -84,7 +97,7 @@ All tables live in a dedicated `campus_music` Postgres schema. Seven tables tota
 
 ### 1.3 API Server (`artifacts/api-server/src/routes/`)
 
-The server is the most "real" part of the codebase. CORS is now allow-listed (Phase 0). JWT is HS256/15m access + 30d DB-backed refresh token (Phase 1). Pino logging is wired up.
+The server is the most "real" part of the codebase. CORS is now allow-listed (Phase 0). JWT is HS256/15m access + 30d DB-backed refresh token (Phase 1). Pino logging is wired up. Storage replaced from GCS sidecar to `StorageProvider` abstraction (Phase 2).
 
 | Endpoint | Status | Notes |
 |---|---|---|
@@ -94,13 +107,15 @@ The server is the most "real" part of the codebase. CORS is now allow-listed (Ph
 | `POST /auth/logout` | ✅ Done (Phase 1) | Revokes the presented refresh token's family. |
 | `GET /auth/me` / `PATCH /auth/me` | ✅ | |
 | `POST /auth/otp/send` / `/auth/otp/verify` | ✅ Done (Phase 1) | **In-memory `Map`** for code storage (TTL-based). OTP send via `@workspace/email` (Resend in prod, console in dev). `devCode` only returned in non-production. `otp/verify` sets `emailVerified=true`. |
-| `POST /tracks` (create) | ✅ | Artist-only; promotes cover URL to public ACL if it was issued via upload registry |
+| `POST /tracks` (create) | ✅ | Artist-only; requires `requireVerified`. Accepts `sourceKey`/`coverSourceKey` (R2 keys). Enqueues `upload_jobs` for transcoding. Sets `processingStatus: 'pending'`. |
 | `GET /tracks` | ✅ | Filters: genre / university / artistId / limit (in-memory filter, full table scan) |
-| `GET /tracks/trending` | ✅ | `ORDER BY playCount DESC` |
+| `GET /tracks/trending` | ✅ Done (Phase 2) | Rewritten to 7-day rolling window from `play_history`, with fallback to all-time `playCount`. Accepts `?days=` param. |
 | `GET /tracks/most-liked` | ✅ | `LEFT JOIN userLikes` aggregate in app code |
 | `GET /tracks/liked` / `/library` | ✅ | Returns array of track IDs |
 | `GET/PATCH/DELETE /tracks/:id` | ✅ | Ownership-checked |
-| `POST /tracks/:id/play` | ✅ | Increments `playCount` (no per-user history row) |
+| `POST /tracks/:id/play` | ✅ Done (Phase 2) | `optionalAuth`. Accepts `{ secondsListened, completed, source, context }`. Inserts `play_history` for authed users. Always increments `playCount`. |
+| `POST /tracks/:id/skip` | ✅ New (Phase 2) | `optionalAuth`. Records `track_skips` for authed users. |
+| `GET /me/history` | ✅ New (Phase 2) | `requireAuth`. Cursor-paginated listening history from `play_history`. |
 | `POST /tracks/:id/like` | ✅ | Real toggle into `user_likes` |
 | `POST /tracks/:id/library` | ✅ | Real toggle into `user_library` |
 | `GET /feed` | ⚠️ | **Just returns tracks ordered by `playCount`** — not a "social posts" feed |
@@ -110,8 +125,9 @@ The server is the most "real" part of the codebase. CORS is now allow-listed (Ph
 | `GET /artists` / `/artists/followed` / `/artists/:id` / `PATCH /artists/:id` / `POST /artists/:id/follow` | ✅ | Follower count is `COUNT(*) FROM artist_follows`. **Seeded** with `seed_f_xxx` user IDs that don't exist in `users` |
 | `GET /users/:id` | ✅ | Handles both real user IDs and synthetic `user-<artistId>` IDs |
 | `GET /connections/search` / `GET /connections?type=…` / `POST /connections/:userId/connect` / `POST /connections/:userId/respond` | ✅ | Real friend graph; handles `user-<artistId>` virtual IDs everywhere |
-| `POST /storage/uploads/request-url` | ✅ | Artist-only. Returns GCS presigned PUT URL via the Replit sidecar (`http://127.0.0.1:1106/object-storage/...`). **Hard dependency on Replit** for token issuance. |
-| `GET /storage/objects/:path` | ✅ | ACL-gated; supports public + private (owner-only) |
+| `POST /storage/uploads/request-url` | ✅ Done (Phase 2) | Artist-only. Returns R2 presigned PUT URL via `StorageProvider`. GCS sidecar dependency removed. |
+| `POST /users/me/avatar` | ✅ New (Phase 2) | `requireAuth` + `requireVerified`. Multipart upload → sharp 3-size resize (64/256/512 WebP) → Supabase Storage. Returns `{ avatarUrl, avatarUrls }`. |
+| `GET /artists/:id/followers` | ✅ New (Phase 2) | Cursor-paginated followers list. Returns `{ followers, nextCursor }`. |
 | `GET/POST /playback` | ⚠️ | One row per user (`userId` is PK) → **no history**, only current position |
 | `POST /auth/refresh` | ✅ New (Phase 1) | Rotates refresh token (revoke old + issue new in same family). Returns fresh `{token, accessToken, refreshToken, user}`. |
 | `POST /auth/password/forgot` | ✅ New (Phase 1) | Rate-limited. Always returns `{sent: true}` (no email enumeration). Sends reset link via email. |
@@ -121,13 +137,14 @@ The server is the most "real" part of the codebase. CORS is now allow-listed (Ph
 
 - ✅ ~~No `requireAuth` middleware~~ — **Done (Phase 0).** `requireAuth`, `optionalAuth`, `requireAdmin` middleware extracted to `lib/jwt`. Inline auth checks replaced across all routes.
 - ✅ ~~No rate limiting~~ — **Done (Phase 0).** Per-route `express-rate-limit` on auth endpoints (login, register, OTP). Per-route mounting (not router-level) to avoid firing on unrelated routes.
-- ❌ No input validation framework — most routes do ad-hoc `typeof x === "string"` checks instead of using `@workspace/api-zod`.
+- ❌ No input validation framework — most routes do ad-hoc `typeof x === "string"` checks instead of using `@workspace/api-zod`. (Profile update enhanced with bio/genre/coverColor in Phase 2.)
 - ✅ ~~No central error handler~~ — **Done (Phase 0).** Central error handler + consistent `{code, message}` shape.
 - ❌ No request ID surfacing to clients.
 - ✅ ~~No tests~~ — **Done (Phase 0).** JWT unit tests, auth middleware tests, auth integration tests (register→login→me→401). Vitest harness + healthz smoke test.
 - ✅ ~~No CI~~ — **Done (Phase 0).** GitHub Actions: lint → typecheck → build → test (with Postgres 16 service).
 - ✅ ~~CORS accepts all origins~~ — **Done (Phase 0).** CORS allow-listed.
 - ⚠️ `JWT_SECRET` falls back to a hardcoded dev string when unset in non-production.
+- ✅ ~~GCS sidecar dependency~~ — **Removed (Phase 2).** `ObjectStorageService`, `objectAcl.ts`, `uploadRegistry.ts` deleted. Replaced by `StorageProvider` interface in `lib/storage/` with `R2Adapter` (audio) + `SupabaseStorageAdapter` (images) + `MemoryStorageAdapter` (dev/CI fallback).
 
 ### 1.4 Mobile App (`artifacts/campus-music-mobile/`)
 
@@ -190,8 +207,8 @@ The entry point (`app/index.tsx`) now checks for a stored token and redirects un
 | Migrations | ✅ `drizzle-kit generate` + checked-in SQL migrations in `lib/db/migrations/` (Phase 0) |
 | Env | ⚠️ Per-artifact `.env` files (gitignored). API requires `DATABASE_URL`; mobile uses `EXPO_PUBLIC_API_URL` |
 | Deployment | ⚠️ `.replit` autoscale + Dockerfile added (Phase 0) — no Fly/Vercel deploy yet |
-| Secrets | ⚠️ JWT secret has insecure dev fallback; GCS auth flows through Replit sidecar (`127.0.0.1:1106`) which **does not exist outside Replit** |
-| Object storage | ⚠️ Works on Replit; needs replacement to deploy off-Replit |
+| Secrets | ⚠️ JWT secret has insecure dev fallback |
+| Object storage | ✅ Done (Phase 2) | `StorageProvider` interface + `R2Adapter` (audio) + `SupabaseStorageAdapter` (images) + `MemoryStorageAdapter` (dev/CI). GCS sidecar removed. |
 
 ---
 
@@ -221,14 +238,14 @@ The entry point (`app/index.tsx`) now checks for a stored token and redirects un
 
 | Item | Status | Effort | Priority | Depends on |
 |---|---|---|---|---|
-| Bio (read + edit) | ⚠️ | S | P0 | `bio` now on `users` (Phase 0 §3.5). Endpoint still needed. |
-| Avatar / cover photo upload | ⚠️ | M | P0 | Storage (§3.3). Today `users.avatarUrl` exists but there's no upload endpoint for it; only tracks get covers. |
+| Bio (read + edit) | ✅ Done (Phase 2) | – | P0 | `PATCH /auth/me` enhanced with bio/genre/coverColor. |
+| Avatar / cover photo upload | ✅ Done (Phase 2) | – | P0 | `POST /users/me/avatar` — multipart → sharp 3-size → Supabase Storage. |
 | Track uploads | ✅ | – | P0 | – |
-| **Multi-bitrate audio transcoding on upload** (AAC 96k / 160k / 320k) — Spotify-class playback | ❌ | M | P0 | Transcoding worker (§3.14) |
-| **Audio served via CDN with signed URLs** (Cloudflare in front of R2) | ❌ | S | P0 | §3.13 |
+| ~~**Multi-bitrate audio transcoding on upload**~~ | ✅ Done (Phase 2) | – | P0 | `apps/transcoder/` Fly worker: ffmpeg → 96k/160k/320k AAC. `tracks.audioUrls` jsonb map. |
+| ~~**Audio served via CDN with signed URLs**~~ | ✅ Done (Phase 2) | – | P0 | `StorageProvider.getSignedReadUrl` + optional `AUDIO_CDN_URL`/`IMAGE_CDN_URL`. |
 | Edit track / delete track | ✅ | – | P0 | – |
 | Follower count | ✅ | – | P0 | – |
-| **Followers list (who follows me)** | ❌ | S | P0 | – |
+| ~~**Followers list (who follows me)**~~ | ✅ Done (Phase 2) | – | P0 | `GET /artists/:id/followers` cursor-paginated. |
 | **Artist analytics: plays / likes / saves / new followers over time** | ❌ | M | P1 | `play_history` table |
 | **Track ordering / pin to top** | ❌ | S | P1 | – |
 | **Public artist URL / share sheet** | ❌ | S | P1 | deep links |
@@ -239,9 +256,9 @@ The entry point (`app/index.tsx`) now checks for a stored token and redirects un
 |---|---|---|---|---|
 | Liked tracks | ✅ | – | P0 | – |
 | Followed artists | ✅ | – | P0 | – |
-| **Listening history** (recently played) | ❌ | M | P0 | `play_history` table (replace `tracks.playCount` increment with per-listen rows) |
+| ~~**Listening history**~~ (recently played) | ✅ Done (Phase 2) | – | P0 | `play_history` table + `GET /me/history` endpoint. |
 | Saved-to-library | ✅ | – | P0 | – |
-| **Listener bio + avatar** | ⚠️ | S | P0 | Same `avatarUrl` upload work as artists |
+| ~~**Listener bio + avatar**~~ | ✅ Done (Phase 2) | – | P0 | Same `POST /users/me/avatar` endpoint works for all users. |
 
 ### 2.4 Live Now — real live audio + chat
 
@@ -336,7 +353,7 @@ Today the home feed in `(tabs)/index.tsx` fabricates posts from artists + tracks
 | Followed artists | ✅ | – | P0 | – |
 | **Full-text search across tracks + artists + universities + users + podcasts** | ⚠️ | M | P0 | Today: full table scan + JS `.includes()`. Switch to Postgres `to_tsvector` + GIN index. |
 | Search users (listeners + artists) as a top-level result | ⚠️ | S | P0 | Promoted from `/connections/search` |
-| **Trending tracks (last 7d)** | ⚠️ | S | P0 | `play_history` window — today's is all-time |
+| ~~**Trending tracks (last 7d)**~~ | ✅ Done (Phase 2) | – | P0 | Rewritten to 7-day rolling window from `play_history`. |
 | **Now Listening row** (real users currently playing music) | ⚠️ | M | P0 | `play_history` w/ `lastListenedAt` index; replace hardcoded `NOW_LISTENING_USERS` |
 | **Trending by Country** (real, replaces hardcoded `TRENDING_COUNTRIES`) | ⚠️ | M | P0 | `play_history` grouped by `users.country` |
 | **Trending by University** | ❌ | S | P0 | Same join, group by `users.university` |
@@ -413,8 +430,8 @@ Repurpose `artifacts/campus-music` (the legacy Vite SPA, currently only a splash
 
 | Item | Status | Effort | Priority | Depends on |
 |---|---|---|---|---|
-| **Replace Replit GCS sidecar** with a portable storage backend (Supabase Storage recommended) | ⚠️ | M | P0 | §3.3 |
-| **Avatar upload endpoint** (`POST /users/me/avatar`) | ❌ | S | P0 | storage backend |
+| ~~**Replace Replit GCS sidecar**~~ | ✅ Done (Phase 2) | – | P0 | `StorageProvider` + R2 + Supabase Storage + Memory fallback |
+| ~~**Avatar upload endpoint**~~ (`POST /users/me/avatar`) | ✅ Done (Phase 2) | – | P0 | multipart → sharp 3-size → Supabase Storage |
 | ~~**Rate limiting**~~ | ✅ Done (Phase 0) | – | P0 | – |
 | **Central validation** with `@workspace/api-zod` everywhere | ⚠️ | M | P0 | – |
 | ~~**Foreign keys + indexes**~~ | ✅ Done (Phase 0) | – | P0 | – |
@@ -435,7 +452,7 @@ Repurpose `artifacts/campus-music` (the legacy Vite SPA, currently only a splash
 | ~~**Prettier config**~~ | ✅ Done (Phase 0) | – | P0 | – |
 | **Hosting decision** (Fly.io for API + Vercel for admin SPA — see §3.4) | ❌ | M | P0 | – |
 | **Production Postgres** (Supabase is already provisioned; verify connection limits + pgBouncer) | ⚠️ | S | P0 | – |
-| **Production object storage** (Supabase Storage — see §3.3) | ❌ | M | P0 | – |
+| ~~**Production object storage**~~ (R2 + Supabase Storage — see §3.3) | ✅ Done (Phase 2) | – | P0 | `StorageProvider` + adapters implemented. Provision R2/Supabase env vars for prod. |
 | **LiveKit Cloud account + secrets** | ❌ | S | P0 | §3.6 |
 | **Expo Push credentials** (Apple + FCM) | ❌ | S | P0 | – |
 | **Mobile app builds** (`eas build` profiles for preview + production) | ❌ | M | P0 | – |
@@ -452,13 +469,13 @@ Repurpose `artifacts/campus-music` (the legacy Vite SPA, currently only a splash
 
 | Item | Status | Effort | Priority | Depends on |
 |---|---|---|---|---|
-| **`pgvector` extension + `track_embeddings`** (CLAP, 512-dim) | ❌ | S | P0 | Phase 2 transcoder worker |
-| **Stems separation on upload** (Demucs, stored alongside master in R2) | ❌ | M | P0 | Phase 2 |
-| **Structured lyrics** (`lyrics_lines` + `lyrics_embeddings`, LRC upload + Whisper auto-fallback) | ❌ | M | P0 | Phase 2 |
-| **`ai_jobs` queue table** + future `ai-worker` Fly app slot | ❌ | S | P0 | – |
-| **`ai_generations` lineage table** (provenance) | ❌ | S | P0 | – |
-| **`users.ai_consent` JSON** (granular opt-in per AI feature) | ❌ | S | P0 | – |
-| **`users.ai_credits` + `ai_credit_ledger`** | ❌ | S | P0 | – |
+| ~~**`pgvector` extension + `track_embeddings`**~~ (CLAP, 512-dim) | ✅ Schema done (Phase 2) | – | P0 | Schema + HNSW index created. Inference deferred to Phase 12 ai-worker. |
+| **Stems separation on upload** (Demucs, stored alongside master in R2) | ⚠️ Schema done (Phase 2) | M | P0 | `tracks.stemUrls` column added. Inference deferred to Phase 12 ai-worker. |
+| ~~**Structured lyrics**~~ (`lyrics_lines` + `lyrics_embeddings`) | ✅ Schema done (Phase 2) | – | P0 | Tables created. LRC upload + Whisper auto-fallback deferred to Phase 12. |
+| ~~**`ai_jobs` queue table**~~ + future `ai-worker` Fly app slot | ✅ Schema done (Phase 2) | – | P0 | Table created. Transcoder queues embedding + stems jobs after transcode. |
+| ~~**`ai_generations` lineage table**~~ (provenance) | ✅ Schema done (Phase 2) | – | P0 | – |
+| ~~**`users.ai_consent` JSON**~~ (granular opt-in per AI feature) | ✅ Schema done (Phase 2) | – | P0 | `ai_consent` jsonb column added (default '{}'). |
+| ~~**`users.ai_credits` + `ai_credit_ledger`**~~ | ✅ Schema done (Phase 2) | – | P0 | `ai_credits` integer on users + `ai_credit_ledger` table. |
 | **Safety + content classifier wrapper** | ❌ | S | P1 | First AI text feature |
 | **`AIProvider` adapter interface** (Anthropic, OpenAI, Stability, Suno, Whisper, Demucs) | ❌ | M | P1 | Phase 12 |
 
@@ -499,14 +516,9 @@ Repurpose `artifacts/campus-music` (the legacy Vite SPA, currently only a splash
 - **Recommendation: (a) — repurpose `artifacts/campus-music`.** It already has Tailwind, Radix UI, Wouter, React-Query, and the workspace's API client. The "splash screen only" state means nothing to throw away, and it gives admins a real desktop UI without polluting the mobile app. Avoid Next.js for now — adds build complexity we don't need for a CRUD dashboard.
 - **Action item:** `lib/api-client-react` already exposes everything; add `requireAdmin`-gated screens (Users, Tracks, Posts, Comments, Flags, Live Sessions, Analytics, Broadcasts).
 
-### 3.3 Object storage — **Cloudflare R2 for audio, Supabase Storage for avatars / cover art**
+### 3.3 Object storage — DONE (Phase 2)
 
-- **Status today:** GCS via Replit sidecar (`http://127.0.0.1:1106`). This only works inside Replit.
-- **Decision: split media by hot/cold and by cost profile.**
-  - **Audio (tracks + podcast episodes + live recordings) → Cloudflare R2.** R2 has **zero egress fees**. Audio playback is the bandwidth-heavy path; Supabase or S3 will bleed money at any real scale (10K MAU × 30 minutes/day × 160kbps ≈ multi-TB/month). R2 is S3-compatible, so the storage adapter stays trivial.
-  - **Images (avatars, cover art, post images) → Supabase Storage.** Small files, fewer requests, leverages the existing Supabase project we're already paying for.
-- **Both sit behind Cloudflare CDN** (`audio.campus-music.app`, `media.campus-music.app`) with signed short-TTL URLs to prevent hotlinking.
-- **Action item:** replace `ObjectStorageService` with a thin `StorageProvider` interface (`putPresignedUrl`, `getSignedReadUrl`, `setVisibility`, `delete`); ship two adapters: `R2Adapter` and `SupabaseStorageAdapter`. Route audio uploads through R2, images through Supabase.
+- **Resolved: Cloudflare R2 for audio + Supabase Storage for images.** `lib/storage/` workspace package with `StorageProvider` interface (6 methods: `getPresignedUploadUrl`, `getSignedReadUrl`, `deleteObject`, `objectExists`, `putBuffer`, `getBuffer`). Three adapters: `R2Adapter` (S3-compatible via `@aws-sdk/client-s3`), `SupabaseStorageAdapter` (via `@supabase/storage-js`), `MemoryStorageAdapter` (dev/CI fallback). Singleton exports `audioStorage` (R2 or Memory) + `imageStorage` (Supabase or Memory). CDN via optional `AUDIO_CDN_URL`/`IMAGE_CDN_URL`. GCS `ObjectStorageService` deleted entirely.
 
 ### 3.4 Hosting / deployment — **Fly.io for API (multi-region), Vercel for admin SPA**
 
@@ -694,26 +706,23 @@ Live audio and Campus Music TV are different products and need different transpo
 
 **Effort:** ~5 dev-days. **New env vars:** `RESEND_API_KEY` (optional), `EMAIL_FROM` (optional), `APP_BASE_URL`.
 
-### Phase 2 — Profiles + Storage + Audio Pipeline + AI Foundations (2.5 weeks)
+### Phase 2 — Profiles + Storage + Audio Pipeline + AI Foundations (2.5 weeks) — COMPLETE
 
-- **Storage layer:** `StorageProvider` interface + `R2Adapter` (audio) + `SupabaseStorageAdapter` (images).
-- **CDN:** Cloudflare zone w/ `audio.campus-music.app` (R2 binding) + `media.campus-music.app` (Supabase). Signed-URL issuer in the API.
-- **Audio transcoding worker:** new `apps/transcoder/` Fly app, ffmpeg + sharp, pulls from `upload_jobs` table, writes 96k/160k/320k AAC variants to R2.
-- Schema: `tracks.audioUrls` (JSON) + `tracks.processingStatus`; `upload_jobs` table.
-- Mobile player picks bitrate via `@react-native-community/netinfo`.
-- Avatar upload endpoint + UI for listener + artist (3 image sizes).
-- Bio + genre + university editable on `users`.
-- Followers list endpoint + screen.
-- **`play_history` table with the full Spotify-class data shape**: `userId`, `trackId`, `playedAt`, `secondsListened`, `completed`, `source`, `context`. Rewrite trending to "last 7 days" off this table.
-- **`track_skips` table** (negative signal for the future recs engine).
-- **AI foundations baked into the same worker** (§3.19, Layer A):
-  - Enable `pgvector` extension.
-  - **Audio embeddings:** transcoder worker also runs CLAP → stores 512-dim vector in `track_embeddings`.
-  - **Stems separation:** transcoder worker also runs Demucs → stores vocals / drums / bass / other stems in R2 alongside the master. Add `tracks.stemUrls` (JSON).
-  - **Structured lyrics support:** `lyrics_lines` table (one row per timed line) + `lyrics_embeddings` (pgvector). Upload accepts LRC files; falls back to Whisper auto-transcription if artist uploads vocals-only.
-  - **AI provenance schema:** `ai_generations` table (lineage), `users.ai_consent` JSON (granular opt-in per feature), `users.ai_credits` integer + `ai_credit_ledger` table.
+> **Merged:** PR #10 (10 commits, `feature/phase-2-storage-audio-ai → main`). CI green.
 
-**Effort:** ~12 dev-days.
+- ✅ `lib/storage/` package: `StorageProvider` interface + `R2Adapter` (S3-compatible, zero-egress audio) + `SupabaseStorageAdapter` (images) + `MemoryStorageAdapter` (dev/CI fallback). Singletons `audioStorage`/`imageStorage`. CDN support via optional `AUDIO_CDN_URL`/`IMAGE_CDN_URL`.
+- ✅ GCS `ObjectStorageService` deleted (256 lines). `routes/storage.ts` rewritten for R2 presigned URLs. Track media resolved via signed URLs at response time (`lib/trackMedia.ts`).
+- ✅ `apps/transcoder/`: standalone Fly.io worker. Polls `upload_jobs` (FOR UPDATE SKIP LOCKED). ffmpeg → 96k/160k/320k AAC. sharp → 3-size cover art WebP. Uploads to R2. Queues `ai_jobs` for embedding + stems. SIGTERM graceful shutdown. Dockerfile: Node 22 + ffmpeg.
+- ✅ Schema: `tracks.audioUrls`/`coverUrls`/`stemUrls` (jsonb) + `processingStatus` (default 'ready'). `upload_jobs` table with status+createdAt index.
+- ✅ `play_history` table (full Spotify-class data shape) + `track_skips` table. `POST /tracks/:id/play` rewritten with per-listen telemetry. New `POST /tracks/:id/skip`, `GET /me/history`. Trending rewritten to 7-day rolling window.
+- ✅ `POST /users/me/avatar` (multipart → sharp 3-size → Supabase Storage). `PATCH /auth/me` enhanced (bio/genre/coverColor). `GET /artists/:id/followers` (cursor-paginated).
+- ✅ AI foundations schema: pgvector extension + `track_embeddings` (512-dim, HNSW cosine) + `lyrics_lines` + `lyrics_embeddings` (1536-dim) + `ai_jobs` + `ai_generations` + `ai_credit_ledger` + `users.aiCredits`/`aiConsent`. Schema only — no inference in Phase 2.
+- ✅ Mobile: adaptive bitrate via `@react-native-community/netinfo` (`useBitrate` hook). Play/skip telemetry reporting.
+- ✅ Migrations: 0005 (storage/transcoding), 0006 (play_history + track_skips), 0007 (AI + pgvector). CI uses `pgvector/pgvector:pg16`.
+- ✅ OpenAPI spec + generated client updated for all new/changed endpoints.
+- ✅ Tests: storage adapter unit tests + play telemetry integration tests + followers list tests.
+
+**Effort:** ~12 dev-days. **New env vars:** `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_ENDPOINT`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_URL`, `AUDIO_CDN_URL` (optional), `IMAGE_CDN_URL` (optional). None required for dev/CI (MemoryStorageAdapter fallback).
 
 ### Phase 3 — Music Feed + Comments + Likes + Shares + Reposts (2 weeks)
 
@@ -914,7 +923,7 @@ Four core artist-side AI tools, all behind the `ai_credits` ledger.
 |---|---|---|---|
 | 0 | Foundations | 1 week | **COMPLETE** |
 | 1 | Real Auth | 1 week | **COMPLETE** |
-| 2 | Profiles + Storage + Audio Pipeline + **AI Foundations** (R2 + CDN + transcoder + embeddings + stems + lyrics) | 2.5 weeks |
+| 2 | Profiles + Storage + Audio Pipeline + **AI Foundations** (R2 + CDN + transcoder + embeddings + stems + lyrics) | 2.5 weeks | **COMPLETE** |
 | 3 | Music Feed + Social Graph (comments/likes/shares/reposts) | 2 weeks |
 | 4 | WebSocket Gateway + Direct Messages | 2 weeks |
 | 5 | Live Now (real audio + chat + live→track publish) | 2.5 weeks |
@@ -1023,4 +1032,4 @@ Things I deliberately did **not** put in the MVP because they require real user 
 
 ---
 
-*Phases 0–1 shipped. Continuing one phase at a time, with a PR per phase. Soft-launch target: ~12 calendar weeks from kickoff (2 engineers, parallel where possible).*
+*Phases 0–2 shipped. Continuing one phase at a time, with a PR per phase. Soft-launch target: ~12 calendar weeks from kickoff (2 engineers, parallel where possible).*
