@@ -20,6 +20,7 @@ import notificationsRouter from "./notifications";
 import discoveryRouter from "./discovery";
 import podcastsRouter from "./podcasts";
 import playlistsRouter from "./playlists";
+import adminRouter from "./admin";
 
 const router: IRouter = Router();
 
@@ -43,6 +44,7 @@ router.use(notificationsRouter);
 router.use(discoveryRouter);
 router.use(podcastsRouter);
 router.use(playlistsRouter);
+router.use(adminRouter);
 router.use(appRouter);
 
 export default router;
