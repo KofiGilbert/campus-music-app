@@ -41,3 +41,6 @@ export * from "./liveSessions";
 export * from "./liveChatMessages";
 export * from "./notifications";
 export * from "./pushTokens";
+export * from "./podcasts";
+export * from "./podcastEpisodes";
+export * from "./podcastSubscriptions";

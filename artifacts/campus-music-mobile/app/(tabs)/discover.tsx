@@ -24,7 +24,7 @@ import { resizeCoverUrl } from "@/utils/coverUrl";
 import { colorToBlurhash } from "@/utils/blurhash";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
-import { getForYou, search as searchApi, useGetMostLikedTracks } from "@workspace/api-client-react";
+import { getForYou, getPodcasts, search as searchApi, useGetMostLikedTracks } from "@workspace/api-client-react";
 import { MusicCard } from "@/components/MusicCard";
 import { NowPlayingBar } from "@/components/NowPlayingBar";
 import { SectionHeader } from "@/components/SectionHeader";
@@ -147,14 +147,19 @@ function NowListeningCircle({ user, track, onPress }: {
   );
 }
 
-function PodcastCard({ pod }: { pod: typeof CAMPUS_PODCASTS[0] }) {
+type PodCardData = { title: string; host: string; type: string; episodes: number; color: string; newEp: boolean; cover: string };
+
+function PodcastCard({ pod, onPress }: { pod: PodCardData; onPress?: () => void }) {
   const colors = useColors();
   const uri = resizeCoverUrl(pod.cover, 300);
   const blurhash = colorToBlurhash(pod.color);
   return (
     <Pressable
       style={ds.podCard}
-      onPress={() => { if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+      onPress={() => {
+        if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        onPress?.();
+      }}
     >
       {/* Square cover — expo-image with cached thumbnail + color placeholder */}
       <View style={ds.podArt}>
@@ -335,6 +340,27 @@ export default function DiscoverScreen() {
     coverUrl: t.coverUrl ?? undefined,
     university: t.university ?? undefined,
     likes: t.likes,
+  }));
+
+  // Real podcasts (fall back to the seed grid when none exist yet).
+  const PODCAST_COLORS = ["#e85d4a", "#8b5cf6", "#3b82f6", "#10b981", "#f59e0b", "#ec4899"];
+  const PODCAST_FALLBACK_COVER = "https://images.unsplash.com/photo-1478737270239-2f02b77fc618";
+  const { data: podcastsData } = useQuery({
+    queryKey: ["podcasts"],
+    queryFn: () => getPodcasts(),
+    staleTime: 5 * 60 * 1000,
+  });
+  const realPods: { id: string; card: PodCardData }[] = (podcastsData?.items ?? []).map((p, i) => ({
+    id: p.id,
+    card: {
+      title: p.title,
+      host: p.host?.name ?? "Host",
+      type: p.university ?? "Podcast",
+      episodes: p.episodeCount,
+      color: PODCAST_COLORS[i % PODCAST_COLORS.length],
+      newEp: false,
+      cover: p.coverUrl ?? PODCAST_FALLBACK_COVER,
+    },
   }));
 
   const isSearchActive = query.trim().length > 0;
@@ -630,9 +656,15 @@ export default function DiscoverScreen() {
             contentContainerStyle={{ paddingHorizontal: 16, gap: 12 }}
             style={{ marginBottom: 28 }}
           >
-            {CAMPUS_PODCASTS.map((pod) => (
-              <PodcastCard key={pod.id} pod={pod} />
-            ))}
+            {realPods.length > 0
+              ? realPods.map((p) => (
+                  <PodcastCard
+                    key={p.id}
+                    pod={p.card}
+                    onPress={() => router.push(`/podcast/${p.id}`)}
+                  />
+                ))
+              : CAMPUS_PODCASTS.map((pod) => <PodcastCard key={pod.id} pod={pod} />)}
           </ScrollView>
 
           {/* Explore by Vibe */}

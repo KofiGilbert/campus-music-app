@@ -28,9 +28,12 @@ import type {
   ConversationsResponse,
   CreateCommentBody,
   CreateConversationBody,
+  CreateEpisodeBody,
   CreateLiveSessionBody,
+  CreatePodcastBody,
   CreatePostBody,
   CreateTrackBody,
+  EpisodesResponse,
   ErrorResponse,
   FeedResponse,
   FollowBody,
@@ -49,6 +52,8 @@ import type {
   GetMessagesParams,
   GetMostLikedTracksParams,
   GetNotificationsParams,
+  GetPodcastEpisodesParams,
+  GetPodcastsParams,
   GetTracksParams,
   GetTrendingByDimensionParams,
   GetTrendingTracksParams,
@@ -84,6 +89,9 @@ import type {
   PlayResponse,
   PlaybackState,
   PlaybackStateBody,
+  Podcast,
+  PodcastEpisode,
+  PodcastsResponse,
   Post,
   PublicProfile,
   RefreshBody,
@@ -104,6 +112,7 @@ import type {
   ShareResponse,
   SkipBody,
   SkipResponse,
+  SubscribeResponse,
   Track,
   TrendingGroupsResponse,
   UnreadCountResponse,
@@ -5275,6 +5284,615 @@ export function useGetForYou<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Create a podcast series (artist only)
+ */
+export const getCreatePodcastUrl = () => {
+  return `/api/podcasts`;
+};
+
+export const createPodcast = async (
+  createPodcastBody: CreatePodcastBody,
+  options?: RequestInit,
+): Promise<Podcast> => {
+  return customFetch<Podcast>(getCreatePodcastUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createPodcastBody),
+  });
+};
+
+export const getCreatePodcastMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createPodcast>>,
+    TError,
+    { data: BodyType<CreatePodcastBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createPodcast>>,
+  TError,
+  { data: BodyType<CreatePodcastBody> },
+  TContext
+> => {
+  const mutationKey = ["createPodcast"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createPodcast>>,
+    { data: BodyType<CreatePodcastBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createPodcast(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreatePodcastMutationResult = NonNullable<Awaited<ReturnType<typeof createPodcast>>>;
+export type CreatePodcastMutationBody = BodyType<CreatePodcastBody>;
+export type CreatePodcastMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Create a podcast series (artist only)
+ */
+export const useCreatePodcast = <TError = ErrorType<ErrorResponse>, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createPodcast>>,
+    TError,
+    { data: BodyType<CreatePodcastBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createPodcast>>,
+  TError,
+  { data: BodyType<CreatePodcastBody> },
+  TContext
+> => {
+  return useMutation(getCreatePodcastMutationOptions(options));
+};
+
+/**
+ * @summary List podcasts (optionally filtered by university)
+ */
+export const getGetPodcastsUrl = (params?: GetPodcastsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/podcasts?${stringifiedParams}` : `/api/podcasts`;
+};
+
+export const getPodcasts = async (
+  params?: GetPodcastsParams,
+  options?: RequestInit,
+): Promise<PodcastsResponse> => {
+  return customFetch<PodcastsResponse>(getGetPodcastsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetPodcastsQueryKey = (params?: GetPodcastsParams) => {
+  return [`/api/podcasts`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetPodcastsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getPodcasts>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetPodcastsParams,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getPodcasts>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetPodcastsQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getPodcasts>>> = ({ signal }) =>
+    getPodcasts(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getPodcasts>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetPodcastsQueryResult = NonNullable<Awaited<ReturnType<typeof getPodcasts>>>;
+export type GetPodcastsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List podcasts (optionally filtered by university)
+ */
+
+export function useGetPodcasts<
+  TData = Awaited<ReturnType<typeof getPodcasts>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetPodcastsParams,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getPodcasts>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetPodcastsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Podcasts the current user is subscribed to
+ */
+export const getGetSubscribedPodcastsUrl = () => {
+  return `/api/podcasts/subscribed`;
+};
+
+export const getSubscribedPodcasts = async (options?: RequestInit): Promise<PodcastsResponse> => {
+  return customFetch<PodcastsResponse>(getGetSubscribedPodcastsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetSubscribedPodcastsQueryKey = () => {
+  return [`/api/podcasts/subscribed`] as const;
+};
+
+export const getGetSubscribedPodcastsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getSubscribedPodcasts>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getSubscribedPodcasts>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetSubscribedPodcastsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getSubscribedPodcasts>>> = ({ signal }) =>
+    getSubscribedPodcasts({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getSubscribedPodcasts>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetSubscribedPodcastsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getSubscribedPodcasts>>
+>;
+export type GetSubscribedPodcastsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Podcasts the current user is subscribed to
+ */
+
+export function useGetSubscribedPodcasts<
+  TData = Awaited<ReturnType<typeof getSubscribedPodcasts>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getSubscribedPodcasts>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetSubscribedPodcastsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get a podcast series
+ */
+export const getGetPodcastUrl = (id: string) => {
+  return `/api/podcasts/${id}`;
+};
+
+export const getPodcast = async (id: string, options?: RequestInit): Promise<Podcast> => {
+  return customFetch<Podcast>(getGetPodcastUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetPodcastQueryKey = (id: string) => {
+  return [`/api/podcasts/${id}`] as const;
+};
+
+export const getGetPodcastQueryOptions = <
+  TData = Awaited<ReturnType<typeof getPodcast>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getPodcast>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetPodcastQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getPodcast>>> = ({ signal }) =>
+    getPodcast(id, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, enabled: !!id, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getPodcast>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetPodcastQueryResult = NonNullable<Awaited<ReturnType<typeof getPodcast>>>;
+export type GetPodcastQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get a podcast series
+ */
+
+export function useGetPodcast<
+  TData = Awaited<ReturnType<typeof getPodcast>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getPodcast>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetPodcastQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Delete a podcast (host only)
+ */
+export const getDeletePodcastUrl = (id: string) => {
+  return `/api/podcasts/${id}`;
+};
+
+export const deletePodcast = async (id: string, options?: RequestInit): Promise<void> => {
+  return customFetch<void>(getDeletePodcastUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeletePodcastMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deletePodcast>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deletePodcast>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deletePodcast"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<Awaited<ReturnType<typeof deletePodcast>>, { id: string }> = (
+    props,
+  ) => {
+    const { id } = props ?? {};
+
+    return deletePodcast(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeletePodcastMutationResult = NonNullable<Awaited<ReturnType<typeof deletePodcast>>>;
+
+export type DeletePodcastMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete a podcast (host only)
+ */
+export const useDeletePodcast = <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deletePodcast>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deletePodcast>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeletePodcastMutationOptions(options));
+};
+
+/**
+ * @summary Cursor-paginated episodes
+ */
+export const getGetPodcastEpisodesUrl = (id: string, params?: GetPodcastEpisodesParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/podcasts/${id}/episodes?${stringifiedParams}`
+    : `/api/podcasts/${id}/episodes`;
+};
+
+export const getPodcastEpisodes = async (
+  id: string,
+  params?: GetPodcastEpisodesParams,
+  options?: RequestInit,
+): Promise<EpisodesResponse> => {
+  return customFetch<EpisodesResponse>(getGetPodcastEpisodesUrl(id, params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetPodcastEpisodesQueryKey = (id: string, params?: GetPodcastEpisodesParams) => {
+  return [`/api/podcasts/${id}/episodes`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetPodcastEpisodesQueryOptions = <
+  TData = Awaited<ReturnType<typeof getPodcastEpisodes>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  params?: GetPodcastEpisodesParams,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getPodcastEpisodes>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetPodcastEpisodesQueryKey(id, params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getPodcastEpisodes>>> = ({ signal }) =>
+    getPodcastEpisodes(id, params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, enabled: !!id, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getPodcastEpisodes>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetPodcastEpisodesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getPodcastEpisodes>>
+>;
+export type GetPodcastEpisodesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Cursor-paginated episodes
+ */
+
+export function useGetPodcastEpisodes<
+  TData = Awaited<ReturnType<typeof getPodcastEpisodes>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  params?: GetPodcastEpisodesParams,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getPodcastEpisodes>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetPodcastEpisodesQueryOptions(id, params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Publish an episode (host only)
+ */
+export const getCreatePodcastEpisodeUrl = (id: string) => {
+  return `/api/podcasts/${id}/episodes`;
+};
+
+export const createPodcastEpisode = async (
+  id: string,
+  createEpisodeBody: CreateEpisodeBody,
+  options?: RequestInit,
+): Promise<PodcastEpisode> => {
+  return customFetch<PodcastEpisode>(getCreatePodcastEpisodeUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createEpisodeBody),
+  });
+};
+
+export const getCreatePodcastEpisodeMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createPodcastEpisode>>,
+    TError,
+    { id: string; data: BodyType<CreateEpisodeBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createPodcastEpisode>>,
+  TError,
+  { id: string; data: BodyType<CreateEpisodeBody> },
+  TContext
+> => {
+  const mutationKey = ["createPodcastEpisode"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createPodcastEpisode>>,
+    { id: string; data: BodyType<CreateEpisodeBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return createPodcastEpisode(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreatePodcastEpisodeMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createPodcastEpisode>>
+>;
+export type CreatePodcastEpisodeMutationBody = BodyType<CreateEpisodeBody>;
+export type CreatePodcastEpisodeMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Publish an episode (host only)
+ */
+export const useCreatePodcastEpisode = <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createPodcastEpisode>>,
+    TError,
+    { id: string; data: BodyType<CreateEpisodeBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createPodcastEpisode>>,
+  TError,
+  { id: string; data: BodyType<CreateEpisodeBody> },
+  TContext
+> => {
+  return useMutation(getCreatePodcastEpisodeMutationOptions(options));
+};
+
+/**
+ * @summary Subscribe / unsubscribe (toggle)
+ */
+export const getTogglePodcastSubscriptionUrl = (id: string) => {
+  return `/api/podcasts/${id}/subscribe`;
+};
+
+export const togglePodcastSubscription = async (
+  id: string,
+  options?: RequestInit,
+): Promise<SubscribeResponse> => {
+  return customFetch<SubscribeResponse>(getTogglePodcastSubscriptionUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getTogglePodcastSubscriptionMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof togglePodcastSubscription>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof togglePodcastSubscription>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["togglePodcastSubscription"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof togglePodcastSubscription>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return togglePodcastSubscription(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type TogglePodcastSubscriptionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof togglePodcastSubscription>>
+>;
+
+export type TogglePodcastSubscriptionMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Subscribe / unsubscribe (toggle)
+ */
+export const useTogglePodcastSubscription = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof togglePodcastSubscription>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof togglePodcastSubscription>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getTogglePodcastSubscriptionMutationOptions(options));
+};
 
 /**
  * @summary List all known universities
