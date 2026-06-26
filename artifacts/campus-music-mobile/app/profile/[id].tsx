@@ -14,8 +14,9 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import { useQuery } from "@tanstack/react-query";
-import { getUserById, getUserPosts } from "@workspace/api-client-react";
+import { createConversation, getUserById, getUserPosts } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
+import { useAuth } from "@/context/AuthContext";
 import { usePlayer } from "@/context/PlayerContext";
 import { PostCard } from "@/components/PostCard";
 import type { Track } from "@/components/MusicCard";
@@ -43,6 +44,21 @@ export default function PublicProfileScreen() {
   const insets = useSafeAreaInsets();
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const { playTrack } = usePlayer();
+  const { user } = useAuth();
+  const [messaging, setMessaging] = React.useState(false);
+
+  const startConversation = async () => {
+    if (!id || messaging) return;
+    setMessaging(true);
+    try {
+      const conv = await createConversation({ userId: id });
+      router.push({ pathname: "/conversation/[id]", params: { id: conv.id, name: conv.participants?.[0]?.name ?? "Conversation" } });
+    } catch {
+      // ignore — verification gate or network; stay on profile
+    } finally {
+      setMessaging(false);
+    }
+  };
 
   const { data: profile, isLoading, isError } = useQuery({
     queryKey: ["user", id],
@@ -140,6 +156,23 @@ export default function PublicProfileScreen() {
             <Ionicons name="school-outline" size={14} color={colors.mutedForeground} />
             <Text style={[styles.metaText, { color: colors.mutedForeground }]}>{profile.university}</Text>
           </View>
+
+          {user?.id !== id && (
+            <Pressable
+              style={[styles.messageBtn, { backgroundColor: colors.primary }]}
+              onPress={startConversation}
+              disabled={messaging}
+            >
+              {messaging ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <>
+                  <Ionicons name="chatbubble-outline" size={16} color="#fff" />
+                  <Text style={styles.messageBtnText}>Message</Text>
+                </>
+              )}
+            </Pressable>
+          )}
         </View>
 
         {/* Bio */}
@@ -293,6 +326,18 @@ const styles = StyleSheet.create({
   },
   statNumber: { fontSize: 18, fontWeight: "700" },
   statLabel: { fontSize: 11 },
+  messageBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    marginTop: 14,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 22,
+    minWidth: 140,
+  },
+  messageBtnText: { color: "#fff", fontSize: 14, fontWeight: "700" },
   tracksSection: { paddingHorizontal: 20, gap: 10 },
   postsSection: { paddingHorizontal: 20, paddingTop: 24, gap: 4 },
   sectionTitle: { fontSize: 18, fontWeight: "700", marginBottom: 4 },

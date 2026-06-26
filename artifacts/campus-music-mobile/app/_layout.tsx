@@ -12,6 +12,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/context/AuthContext";
 import { PlayerProvider } from "@/context/PlayerContext";
 import { RegistrationProvider } from "@/context/RegistrationContext";
+import { SocketProvider } from "@/context/SocketContext";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -80,11 +81,13 @@ export default function RootLayout() {
           <GestureHandlerRootView style={{ flex: 1 }}>
             <KeyboardProvider>
               <AuthProvider>
-                <RegistrationProvider>
-                  <PlayerProvider>
-                    <RootLayoutNav />
-                  </PlayerProvider>
-                </RegistrationProvider>
+                <SocketProvider>
+                  <RegistrationProvider>
+                    <PlayerProvider>
+                      <RootLayoutNav />
+                    </PlayerProvider>
+                  </RegistrationProvider>
+                </SocketProvider>
               </AuthProvider>
             </KeyboardProvider>
           </GestureHandlerRootView>
