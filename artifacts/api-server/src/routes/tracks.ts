@@ -1,6 +1,16 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { eq, desc, and, sql, count, inArray } from "drizzle-orm";
-import { db, tracks, userLikes, userLibrary, userPlayback, users, uploadJobs } from "@workspace/db";
+import { eq, desc, and, sql, count, inArray, gte, lt } from "drizzle-orm";
+import {
+  db,
+  tracks,
+  userLikes,
+  userLibrary,
+  userPlayback,
+  users,
+  uploadJobs,
+  playHistory,
+  trackSkips,
+} from "@workspace/db";
 import { optionalAuth, requireAuth, requireVerified } from "../middlewares/auth";
 import { signTrackMedia, signTracksMedia } from "../lib/trackMedia";
 
@@ -126,9 +136,33 @@ router.get("/tracks", async (req, res): Promise<void> => {
 
 router.get("/tracks/trending", async (req, res): Promise<void> => {
   const limitParam = typeof req.query.limit === "string" ? parseInt(req.query.limit, 10) : 100;
-  const limit = isNaN(limitParam) ? 100 : limitParam;
+  const limit = isNaN(limitParam) || limitParam <= 0 ? 100 : Math.min(limitParam, 200);
+  const daysParam = typeof req.query.days === "string" ? parseInt(req.query.days, 10) : 7;
+  const days = isNaN(daysParam) || daysParam <= 0 ? 7 : daysParam;
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
-  const trending = await db.select().from(tracks).orderBy(desc(tracks.playCount)).limit(limit);
+  // Rank by plays in the rolling window from play_history.
+  const windowCounts = await db
+    .select({ trackId: playHistory.trackId, plays: count() })
+    .from(playHistory)
+    .where(gte(playHistory.playedAt, since))
+    .groupBy(playHistory.trackId)
+    .orderBy(desc(count()))
+    .limit(limit);
+
+  let trending: (typeof tracks.$inferSelect)[];
+  if (windowCounts.length > 0) {
+    const ids = windowCounts.map((c) => c.trackId);
+    const rows = await db.select().from(tracks).where(inArray(tracks.id, ids));
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    trending = windowCounts
+      .map((c) => byId.get(c.trackId))
+      .filter((t): t is typeof tracks.$inferSelect => t !== undefined);
+  } else {
+    // Graceful fallback before play_history has data: all-time playCount.
+    trending = await db.select().from(tracks).orderBy(desc(tracks.playCount)).limit(limit);
+  }
+
   const likeMap = await getLikeCountMap(trending.map((t) => t.id));
   res.json(await signTracksMedia(trending.map((t) => ({ ...t, likes: likeMap.get(t.id) ?? 0 }))));
 });
@@ -271,11 +305,35 @@ router.delete("/tracks/:id", requireAuth, async (req: Request<{ id: string }>, r
   res.status(204).send();
 });
 
-router.post("/tracks/:id/play", async (req, res): Promise<void> => {
-  const [track] = await db.select().from(tracks).where(eq(tracks.id, req.params.id));
+router.post("/tracks/:id/play", optionalAuth, async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+  const [track] = await db
+    .select({ id: tracks.id })
+    .from(tracks)
+    .where(eq(tracks.id, req.params.id))
+    .limit(1);
   if (!track) {
     res.status(404).json({ error: "Track not found" });
     return;
+  }
+
+  const { secondsListened, completed, source, context } = req.body as {
+    secondsListened?: unknown;
+    completed?: unknown;
+    source?: unknown;
+    context?: unknown;
+  };
+
+  // Detailed per-listen row for signed-in users; playCount stays as the
+  // denormalized all-time counter.
+  if (req.userId) {
+    await db.insert(playHistory).values({
+      userId: req.userId,
+      trackId: track.id,
+      secondsListened: typeof secondsListened === "number" ? secondsListened : 0,
+      completed: completed === true,
+      source: typeof source === "string" && source ? source : "unknown",
+      context: typeof context === "string" ? context : null,
+    });
   }
 
   const [updated] = await db
@@ -284,9 +342,65 @@ router.post("/tracks/:id/play", async (req, res): Promise<void> => {
     .where(eq(tracks.id, track.id))
     .returning({ playCount: tracks.playCount });
 
-  req.log.info({ trackId: track.id, playCount: updated.playCount }, "Play count incremented");
-
   res.json({ trackId: track.id, playCount: updated.playCount });
+});
+
+router.post("/tracks/:id/skip", optionalAuth, async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+  const [track] = await db
+    .select({ id: tracks.id })
+    .from(tracks)
+    .where(eq(tracks.id, req.params.id))
+    .limit(1);
+  if (!track) {
+    res.status(404).json({ error: "Track not found" });
+    return;
+  }
+
+  const { secondsBeforeSkip } = req.body as { secondsBeforeSkip?: unknown };
+  if (req.userId) {
+    await db.insert(trackSkips).values({
+      userId: req.userId,
+      trackId: track.id,
+      secondsBeforeSkip: typeof secondsBeforeSkip === "number" ? secondsBeforeSkip : 0,
+    });
+  }
+
+  res.json({ trackId: track.id, recorded: !!req.userId });
+});
+
+// Cursor-paginated listening history (cursor = playedAt ISO of the last row).
+router.get("/me/history", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.userId!;
+  const limit = 20;
+  const cursor = typeof req.query.cursor === "string" ? new Date(req.query.cursor) : null;
+  const validCursor = cursor && !isNaN(cursor.getTime()) ? cursor : null;
+
+  const rows = await db
+    .select({ track: tracks, playedAt: playHistory.playedAt, secondsListened: playHistory.secondsListened, completed: playHistory.completed })
+    .from(playHistory)
+    .innerJoin(tracks, eq(playHistory.trackId, tracks.id))
+    .where(
+      validCursor
+        ? and(eq(playHistory.userId, userId), lt(playHistory.playedAt, validCursor))
+        : eq(playHistory.userId, userId),
+    )
+    .orderBy(desc(playHistory.playedAt))
+    .limit(limit + 1);
+
+  const hasMore = rows.length > limit;
+  const page = hasMore ? rows.slice(0, limit) : rows;
+  const nextCursor = hasMore ? page[page.length - 1].playedAt.toISOString() : null;
+
+  const history = await Promise.all(
+    page.map(async (r) => ({
+      track: await signTrackMedia(r.track),
+      playedAt: r.playedAt,
+      secondsListened: r.secondsListened,
+      completed: r.completed,
+    })),
+  );
+
+  res.json({ history, nextCursor });
 });
 
 router.post("/tracks/:id/like", optionalAuth, async (req: Request<{ id: string }>, res: Response): Promise<void> => {

@@ -26,3 +26,5 @@ export * from "./playback";
 export * from "./refreshTokens";
 export * from "./passwordResetTokens";
 export * from "./uploadJobs";
+export * from "./playHistory";
+export * from "./trackSkips";

@@ -43,6 +43,13 @@
       "when": 1782462889657,
       "tag": "0005_storage_transcoding",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1782463332634,
+      "tag": "0006_play_history",
+      "breakpoints": true
     }
   ]
 }
