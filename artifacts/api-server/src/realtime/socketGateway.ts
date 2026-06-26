@@ -6,6 +6,7 @@ import { verifyToken } from "../lib/jwt";
 import { logger } from "../lib/logger";
 import {
   conversationRoom,
+  liveRoom,
   type RealtimeGateway,
   setRealtimeGateway,
   userRoom,
@@ -61,6 +62,14 @@ function registerHandlers(socket: Socket): void {
         : undefined;
     if (typeof conversationId !== "string") return;
     socket.to(conversationRoom(conversationId)).emit("dm:typing", { conversationId, userId });
+  });
+
+  // Live sessions are public, so joining the chat room needs no membership check.
+  socket.on("live:join", (sessionId: unknown) => {
+    if (typeof sessionId === "string") void socket.join(liveRoom(sessionId));
+  });
+  socket.on("live:leave", (sessionId: unknown) => {
+    if (typeof sessionId === "string") void socket.leave(liveRoom(sessionId));
   });
 }
 

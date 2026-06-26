@@ -15,6 +15,7 @@ import usersRouter from "./users";
 import postsRouter from "./posts";
 import commentsRouter from "./comments";
 import messagesRouter from "./messages";
+import liveRouter from "./live";
 
 const router: IRouter = Router();
 
@@ -33,6 +34,7 @@ router.use(usersRouter);
 router.use(postsRouter);
 router.use(commentsRouter);
 router.use(messagesRouter);
+router.use(liveRouter);
 router.use(appRouter);
 
 export default router;
