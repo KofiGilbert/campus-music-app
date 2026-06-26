@@ -36,6 +36,13 @@
       "when": 1782458113393,
       "tag": "0004_email_verified",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1782462889657,
+      "tag": "0005_storage_transcoding",
+      "breakpoints": true
     }
   ]
 }

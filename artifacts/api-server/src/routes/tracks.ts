@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { eq, desc, and, sql, count, inArray } from "drizzle-orm";
-import { db, tracks, userLikes, userLibrary, userPlayback, users } from "@workspace/db";
+import { db, tracks, userLikes, userLibrary, userPlayback, users, uploadJobs } from "@workspace/db";
 import { optionalAuth, requireAuth, requireVerified } from "../middlewares/auth";
 import { signTrackMedia, signTracksMedia } from "../lib/trackMedia";
 
@@ -95,10 +95,14 @@ router.post("/tracks", requireAuth, requireVerified, async (req, res): Promise<v
       audioUrl: sourceKey.trim(),
       coverUrl: typeof coverSourceKey === "string" ? coverSourceKey : null,
       university: user.university ?? "",
+      processingStatus: "pending",
     })
     .returning();
 
-  req.log.info({ trackId: track.id, userId }, "Track created");
+  // Enqueue transcoding (the transcoder worker polls upload_jobs).
+  await db.insert(uploadJobs).values({ trackId: track.id, sourceKey: sourceKey.trim() });
+
+  req.log.info({ trackId: track.id, userId }, "Track created + transcode job enqueued");
 
   res.status(201).json({ ...(await signTrackMedia(track)), likes: 0 });
 });

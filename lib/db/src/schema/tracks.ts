@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, integer, text, timestamp, varchar } from "drizzle-orm/pg-core";
+import { index, integer, jsonb, text, timestamp, varchar } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { campusMusic } from "./namespace";
@@ -18,8 +18,16 @@ export const tracks = campusMusic.table(
     duration: text("duration").notNull(),
     durationSeconds: integer("duration_seconds").notNull(),
     coverColor: text("cover_color").notNull(),
+    // audioUrl/coverUrl hold a single key (backward compat: 160k audio / medium
+    // cover after transcoding). The JSON maps hold all variants by label.
     audioUrl: text("audio_url"),
     coverUrl: text("cover_url"),
+    audioUrls: jsonb("audio_urls").$type<Record<string, string>>(), // { "96","160","320" }
+    coverUrls: jsonb("cover_urls").$type<Record<string, string>>(), // { thumb, medium, full }
+    stemUrls: jsonb("stem_urls").$type<Record<string, string>>(), // populated by the AI worker
+    // pending | processing | ready | failed. Default 'ready' so pre-existing rows
+    // (created before transcoding) stay playable.
+    processingStatus: text("processing_status").notNull().default("ready"),
     playCount: integer("play_count").notNull().default(0),
     university: text("university").notNull().default(""),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
