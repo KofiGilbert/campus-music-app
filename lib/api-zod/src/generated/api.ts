@@ -191,10 +191,7 @@ export const GetTracksResponse = zod.array(GetTracksResponseItem);
  * @summary Get trending tracks sorted by play count
  */
 export const GetTrendingTracksQueryParams = zod.object({
-  limit: zod.coerce
-    .number()
-    .optional()
-    .describe("Max number of results (default 10)"),
+  limit: zod.coerce.number().optional().describe("Max number of results (default 10)"),
 });
 
 export const GetTrendingTracksResponseItem = zod.object({
@@ -212,18 +209,13 @@ export const GetTrendingTracksResponseItem = zod.object({
   likes: zod.number(),
   university: zod.string().nullable(),
 });
-export const GetTrendingTracksResponse = zod.array(
-  GetTrendingTracksResponseItem,
-);
+export const GetTrendingTracksResponse = zod.array(GetTrendingTracksResponseItem);
 
 /**
  * @summary Get tracks sorted by total like count (popularity leaderboard)
  */
 export const GetMostLikedTracksQueryParams = zod.object({
-  limit: zod.coerce
-    .number()
-    .optional()
-    .describe("Max number of results (default 50)"),
+  limit: zod.coerce.number().optional().describe("Max number of results (default 50)"),
 });
 
 export const GetMostLikedTracksResponseItem = zod.object({
@@ -241,9 +233,7 @@ export const GetMostLikedTracksResponseItem = zod.object({
   likes: zod.number(),
   university: zod.string().nullable(),
 });
-export const GetMostLikedTracksResponse = zod.array(
-  GetMostLikedTracksResponseItem,
-);
+export const GetMostLikedTracksResponse = zod.array(GetMostLikedTracksResponseItem);
 
 /**
  * @summary Get a single track by ID
@@ -314,9 +304,7 @@ export const GetLikedTrackIdsResponse = zod.array(GetLikedTrackIdsResponseItem);
  * @summary Get library (saved) track IDs for the current user
  */
 export const GetLibraryTrackIdsResponseItem = zod.string();
-export const GetLibraryTrackIdsResponse = zod.array(
-  GetLibraryTrackIdsResponseItem,
-);
+export const GetLibraryTrackIdsResponse = zod.array(GetLibraryTrackIdsResponseItem);
 
 /**
  * @summary Like or unlike a track (persisted per-user when authenticated)
@@ -446,9 +434,7 @@ export const SearchUniversitiesQueryParams = zod.object({
 });
 
 export const SearchUniversitiesResponseItem = zod.string();
-export const SearchUniversitiesResponse = zod.array(
-  SearchUniversitiesResponseItem,
-);
+export const SearchUniversitiesResponse = zod.array(SearchUniversitiesResponseItem);
 
 /**
  * @summary List all artists
@@ -465,9 +451,7 @@ export const GetArtistsResponseItem = zod.object({
   following: zod
     .boolean()
     .optional()
-    .describe(
-      "Whether the authenticated user follows this artist. Omitted when unauthenticated.",
-    ),
+    .describe("Whether the authenticated user follows this artist. Omitted when unauthenticated."),
 });
 export const GetArtistsResponse = zod.array(GetArtistsResponseItem);
 
@@ -486,13 +470,9 @@ export const GetFollowedArtistsResponseItem = zod.object({
   following: zod
     .boolean()
     .optional()
-    .describe(
-      "Whether the authenticated user follows this artist. Omitted when unauthenticated.",
-    ),
+    .describe("Whether the authenticated user follows this artist. Omitted when unauthenticated."),
 });
-export const GetFollowedArtistsResponse = zod.array(
-  GetFollowedArtistsResponseItem,
-);
+export const GetFollowedArtistsResponse = zod.array(GetFollowedArtistsResponseItem);
 
 /**
  * @summary Get a single artist by ID
@@ -513,9 +493,7 @@ export const GetArtistByIdResponse = zod.object({
   following: zod
     .boolean()
     .optional()
-    .describe(
-      "Whether the authenticated user follows this artist. Omitted when unauthenticated.",
-    ),
+    .describe("Whether the authenticated user follows this artist. Omitted when unauthenticated."),
 });
 
 /**
@@ -544,9 +522,7 @@ export const UpdateArtistResponse = zod.object({
   following: zod
     .boolean()
     .optional()
-    .describe(
-      "Whether the authenticated user follows this artist. Omitted when unauthenticated.",
-    ),
+    .describe("Whether the authenticated user follows this artist. Omitted when unauthenticated."),
 });
 
 /**
@@ -603,9 +579,7 @@ export const GetUserByIdResponse = zod.object({
  * @summary Search registered users by name or university
  */
 export const SearchConnectionsQueryParams = zod.object({
-  q: zod.coerce
-    .string()
-    .describe("Search query (matched against name and university)"),
+  q: zod.coerce.string().describe("Search query (matched against name and university)"),
 });
 
 export const SearchConnectionsResponseItem = zod.object({
@@ -618,9 +592,7 @@ export const SearchConnectionsResponseItem = zod.object({
   mutualCount: zod.number(),
   status: zod.enum(["none", "sent", "received", "connected"]),
 });
-export const SearchConnectionsResponse = zod.array(
-  SearchConnectionsResponseItem,
-);
+export const SearchConnectionsResponse = zod.array(SearchConnectionsResponseItem);
 
 /**
  * @summary Get user connections

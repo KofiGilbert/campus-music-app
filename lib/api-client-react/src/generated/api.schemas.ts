@@ -9,8 +9,7 @@ export interface HealthStatus {
   status: string;
 }
 
-export type RegisterBodyRole =
-  (typeof RegisterBodyRole)[keyof typeof RegisterBodyRole];
+export type RegisterBodyRole = (typeof RegisterBodyRole)[keyof typeof RegisterBodyRole];
 
 export const RegisterBodyRole = {
   listener: "listener",
@@ -31,8 +30,7 @@ export interface LoginBody {
   password: string;
 }
 
-export type UserProfileRole =
-  (typeof UserProfileRole)[keyof typeof UserProfileRole];
+export type UserProfileRole = (typeof UserProfileRole)[keyof typeof UserProfileRole];
 
 export const UserProfileRole = {
   listener: "listener",
@@ -127,8 +125,7 @@ export interface SearchResults {
   artists: Artist[];
 }
 
-export type PublicProfileRole =
-  (typeof PublicProfileRole)[keyof typeof PublicProfileRole];
+export type PublicProfileRole = (typeof PublicProfileRole)[keyof typeof PublicProfileRole];
 
 export const PublicProfileRole = {
   listener: "listener",
@@ -146,8 +143,7 @@ export interface PublicProfile {
   tracks: Track[];
 }
 
-export type ConnectionUserStatus =
-  (typeof ConnectionUserStatus)[keyof typeof ConnectionUserStatus];
+export type ConnectionUserStatus = (typeof ConnectionUserStatus)[keyof typeof ConnectionUserStatus];
 
 export const ConnectionUserStatus = {
   none: "none",
@@ -350,8 +346,7 @@ export type GetConnectionsParams = {
   type?: GetConnectionsType;
 };
 
-export type GetConnectionsType =
-  (typeof GetConnectionsType)[keyof typeof GetConnectionsType];
+export type GetConnectionsType = (typeof GetConnectionsType)[keyof typeof GetConnectionsType];
 
 export const GetConnectionsType = {
   discover: "discover",
