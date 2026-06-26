@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { db, users, artistFollows } from "@workspace/db";
-import { and, eq, count } from "drizzle-orm";
+import { and, eq, count, desc, lt } from "drizzle-orm";
 import { optionalAuth, requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
@@ -218,5 +218,48 @@ router.post("/artists/:id/follow", requireAuth, async (req: Request<{ id: string
   const followerCount = await getFollowerCount(artist.id);
   res.json({ artistId: artist.id, followerCount, following: isFollowing });
 });
+
+// Cursor-paginated followers list (cursor = artist_follows.createdAt ISO).
+router.get(
+  "/artists/:id/followers",
+  async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+    const artistId = req.params.id;
+    const limit = 20;
+    const cursor = typeof req.query.cursor === "string" ? new Date(req.query.cursor) : null;
+    const validCursor = cursor && !isNaN(cursor.getTime()) ? cursor : null;
+
+    const rows = await db
+      .select({
+        id: users.id,
+        username: users.username,
+        name: users.name,
+        avatarUrl: users.avatarUrl,
+        followedAt: artistFollows.createdAt,
+      })
+      .from(artistFollows)
+      .innerJoin(users, eq(artistFollows.userId, users.id))
+      .where(
+        validCursor
+          ? and(eq(artistFollows.artistId, artistId), lt(artistFollows.createdAt, validCursor))
+          : eq(artistFollows.artistId, artistId),
+      )
+      .orderBy(desc(artistFollows.createdAt))
+      .limit(limit + 1);
+
+    const hasMore = rows.length > limit;
+    const page = hasMore ? rows.slice(0, limit) : rows;
+    const nextCursor = hasMore ? page[page.length - 1].followedAt.toISOString() : null;
+
+    res.json({
+      followers: page.map((f) => ({
+        id: f.id,
+        username: f.username,
+        name: f.name,
+        avatarUrl: f.avatarUrl,
+      })),
+      nextCursor,
+    });
+  },
+);
 
 export default router;
