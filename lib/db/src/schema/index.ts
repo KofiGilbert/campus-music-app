@@ -34,3 +34,6 @@ export * from "./comments";
 export * from "./postLikes";
 export * from "./commentLikes";
 export * from "./postShares";
+export * from "./conversations";
+export * from "./conversationParticipants";
+export * from "./messages";

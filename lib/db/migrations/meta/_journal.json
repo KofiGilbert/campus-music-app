@@ -64,6 +64,13 @@
       "when": 1782467388266,
       "tag": "0008_social_posts",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1782505717944,
+      "tag": "0009_dm_conversations",
+      "breakpoints": true
     }
   ]
 }
