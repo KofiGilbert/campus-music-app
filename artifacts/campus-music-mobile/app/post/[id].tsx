@@ -5,6 +5,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   KeyboardAvoidingView,
   Platform,
@@ -17,7 +18,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
 import type { Comment } from "@workspace/api-client-react";
-import { createComment, getComments, getPost, toggleCommentLike } from "@workspace/api-client-react";
+import { createComment, createFlag, getComments, getPost, toggleCommentLike } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
 
 function timeAgo(iso: string): string {
@@ -134,7 +135,17 @@ export default function PostDetailScreen() {
           <Ionicons name="chevron-back" size={26} color={colors.foreground} />
         </Pressable>
         <Text style={[styles.topTitle, { color: colors.foreground }]}>Post</Text>
-        <View style={{ width: 26 }} />
+        <Pressable
+          onPress={() => {
+            if (!id) return;
+            void createFlag({ targetType: "post", targetId: id }).then(() =>
+              Alert.alert("Reported", "Thanks — our team will review this post."),
+            );
+          }}
+          hitSlop={10}
+        >
+          <Ionicons name="alert-circle-outline" size={22} color={colors.mutedForeground} />
+        </Pressable>
       </View>
 
       <FlatList
