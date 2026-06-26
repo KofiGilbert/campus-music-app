@@ -1266,10 +1266,14 @@ export const UnregisterPushTokenResponse = zod.object({
 });
 
 /**
- * @summary Search tracks and artists
+ * @summary Faceted full-text search (tracks, artists, users, universities)
  */
 export const SearchQueryParams = zod.object({
   q: zod.coerce.string().describe("Search query"),
+  type: zod
+    .enum(["all", "tracks", "artists", "users", "universities"])
+    .optional()
+    .describe("Facet to search (default all)"),
 });
 
 export const SearchResponse = zod.object({
@@ -1310,6 +1314,125 @@ export const SearchResponse = zod.object({
         .describe(
           "Whether the authenticated user follows this artist. Omitted when unauthenticated.",
         ),
+    }),
+  ),
+  users: zod
+    .array(
+      zod.object({
+        id: zod.string(),
+        username: zod.string(),
+        name: zod.string(),
+        avatarUrl: zod.string().nullish(),
+        university: zod.string().nullish(),
+        role: zod.string(),
+      }),
+    )
+    .optional(),
+  universities: zod.array(zod.string()).optional(),
+});
+
+/**
+ * @summary Users currently playing music (latest play in the last hour)
+ */
+export const GetNowListeningResponse = zod.object({
+  items: zod.array(
+    zod.object({
+      user: zod.object({
+        id: zod.string(),
+        username: zod.string(),
+        name: zod.string(),
+        avatarUrl: zod.string().nullish(),
+        university: zod.string().nullish(),
+        role: zod.string(),
+      }),
+      track: zod.object({
+        id: zod.string(),
+        title: zod.string(),
+        artist: zod.string(),
+        artistId: zod.string(),
+        genre: zod.string(),
+        duration: zod.string(),
+        durationSeconds: zod.number(),
+        coverColor: zod.string(),
+        audioUrl: zod.string().nullable(),
+        coverUrl: zod.string().nullable(),
+        playCount: zod.number(),
+        likes: zod.number(),
+        university: zod.string().nullable(),
+        audioUrls: zod.record(zod.string(), zod.string()).nullish(),
+        coverUrls: zod.record(zod.string(), zod.string()).nullish(),
+        stemUrls: zod.record(zod.string(), zod.string()).nullish(),
+        processingStatus: zod.enum(["pending", "processing", "ready", "failed"]).optional(),
+      }),
+      playedAt: zod.string(),
+    }),
+  ),
+});
+
+/**
+ * @summary Trending tracks grouped by country or university (7-day window)
+ */
+export const GetTrendingByDimensionQueryParams = zod.object({
+  dimension: zod
+    .enum(["country", "university"])
+    .optional()
+    .describe("Grouping dimension (default country)"),
+});
+
+export const GetTrendingByDimensionResponse = zod.object({
+  dimension: zod.string(),
+  groups: zod.array(
+    zod.object({
+      key: zod.string(),
+      plays: zod.number(),
+      tracks: zod.array(
+        zod.object({
+          id: zod.string(),
+          title: zod.string(),
+          artist: zod.string(),
+          artistId: zod.string(),
+          genre: zod.string(),
+          duration: zod.string(),
+          durationSeconds: zod.number(),
+          coverColor: zod.string(),
+          audioUrl: zod.string().nullable(),
+          coverUrl: zod.string().nullable(),
+          playCount: zod.number(),
+          likes: zod.number(),
+          university: zod.string().nullable(),
+          audioUrls: zod.record(zod.string(), zod.string()).nullish(),
+          coverUrls: zod.record(zod.string(), zod.string()).nullish(),
+          stemUrls: zod.record(zod.string(), zod.string()).nullish(),
+          processingStatus: zod.enum(["pending", "processing", "ready", "failed"]).optional(),
+        }),
+      ),
+    }),
+  ),
+});
+
+/**
+ * @summary Personalized rail (connections' likes + same-university trending)
+ */
+export const GetForYouResponse = zod.object({
+  tracks: zod.array(
+    zod.object({
+      id: zod.string(),
+      title: zod.string(),
+      artist: zod.string(),
+      artistId: zod.string(),
+      genre: zod.string(),
+      duration: zod.string(),
+      durationSeconds: zod.number(),
+      coverColor: zod.string(),
+      audioUrl: zod.string().nullable(),
+      coverUrl: zod.string().nullable(),
+      playCount: zod.number(),
+      likes: zod.number(),
+      university: zod.string().nullable(),
+      audioUrls: zod.record(zod.string(), zod.string()).nullish(),
+      coverUrls: zod.record(zod.string(), zod.string()).nullish(),
+      stemUrls: zod.record(zod.string(), zod.string()).nullish(),
+      processingStatus: zod.enum(["pending", "processing", "ready", "failed"]).optional(),
     }),
   ),
 });

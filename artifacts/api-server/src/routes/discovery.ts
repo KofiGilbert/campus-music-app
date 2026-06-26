@@ -36,7 +36,14 @@ router.get("/discovery/now-listening", optionalAuth, async (_req, res): Promise<
 
   const trackMap = await signByIds([...new Set(recent.map((r) => r.trackId))]);
   const userRows = await db
-    .select({ id: users.id, username: users.username, name: users.name, avatarUrl: users.avatarUrl })
+    .select({
+      id: users.id,
+      username: users.username,
+      name: users.name,
+      avatarUrl: users.avatarUrl,
+      university: users.university,
+      role: users.role,
+    })
     .from(users)
     .where(inArray(users.id, [...new Set(recent.map((r) => r.userId))]));
   const userMap = new Map(userRows.map((u) => [u.id, u]));

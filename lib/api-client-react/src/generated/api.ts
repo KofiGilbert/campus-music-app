@@ -36,6 +36,7 @@ import type {
   FollowBody,
   FollowResponse,
   FollowersResponse,
+  ForYouResponse,
   ForgotPasswordBody,
   ForgotPasswordResponse,
   GetCommentsParams,
@@ -49,6 +50,7 @@ import type {
   GetMostLikedTracksParams,
   GetNotificationsParams,
   GetTracksParams,
+  GetTrendingByDimensionParams,
   GetTrendingTracksParams,
   GetUserPostsParams,
   HealthStatus,
@@ -72,6 +74,7 @@ import type {
   NotifPrefsBody,
   NotifPrefsResponse,
   NotificationsResponse,
+  NowListeningResponse,
   OkResponse,
   OtpSendBody,
   OtpSendResponse,
@@ -102,6 +105,7 @@ import type {
   SkipBody,
   SkipResponse,
   Track,
+  TrendingGroupsResponse,
   UnreadCountResponse,
   UnregisterPushTokenBody,
   UpdateArtistBody,
@@ -4994,7 +4998,7 @@ export const useUnregisterPushToken = <TError = ErrorType<unknown>, TContext = u
 };
 
 /**
- * @summary Search tracks and artists
+ * @summary Faceted full-text search (tracks, artists, users, universities)
  */
 export const getSearchUrl = (params: SearchParams) => {
   const normalizedParams = new URLSearchParams();
@@ -5052,7 +5056,7 @@ export type SearchQueryResult = NonNullable<Awaited<ReturnType<typeof search>>>;
 export type SearchQueryError = ErrorType<unknown>;
 
 /**
- * @summary Search tracks and artists
+ * @summary Faceted full-text search (tracks, artists, users, universities)
  */
 
 export function useSearch<TData = Awaited<ReturnType<typeof search>>, TError = ErrorType<unknown>>(
@@ -5063,6 +5067,209 @@ export function useSearch<TData = Awaited<ReturnType<typeof search>>, TError = E
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getSearchQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Users currently playing music (latest play in the last hour)
+ */
+export const getGetNowListeningUrl = () => {
+  return `/api/discovery/now-listening`;
+};
+
+export const getNowListening = async (options?: RequestInit): Promise<NowListeningResponse> => {
+  return customFetch<NowListeningResponse>(getGetNowListeningUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetNowListeningQueryKey = () => {
+  return [`/api/discovery/now-listening`] as const;
+};
+
+export const getGetNowListeningQueryOptions = <
+  TData = Awaited<ReturnType<typeof getNowListening>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getNowListening>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetNowListeningQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getNowListening>>> = ({ signal }) =>
+    getNowListening({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getNowListening>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetNowListeningQueryResult = NonNullable<Awaited<ReturnType<typeof getNowListening>>>;
+export type GetNowListeningQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Users currently playing music (latest play in the last hour)
+ */
+
+export function useGetNowListening<
+  TData = Awaited<ReturnType<typeof getNowListening>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getNowListening>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetNowListeningQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Trending tracks grouped by country or university (7-day window)
+ */
+export const getGetTrendingByDimensionUrl = (params?: GetTrendingByDimensionParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/discovery/trending?${stringifiedParams}`
+    : `/api/discovery/trending`;
+};
+
+export const getTrendingByDimension = async (
+  params?: GetTrendingByDimensionParams,
+  options?: RequestInit,
+): Promise<TrendingGroupsResponse> => {
+  return customFetch<TrendingGroupsResponse>(getGetTrendingByDimensionUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetTrendingByDimensionQueryKey = (params?: GetTrendingByDimensionParams) => {
+  return [`/api/discovery/trending`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetTrendingByDimensionQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTrendingByDimension>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetTrendingByDimensionParams,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getTrendingByDimension>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetTrendingByDimensionQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getTrendingByDimension>>> = ({ signal }) =>
+    getTrendingByDimension(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTrendingByDimension>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetTrendingByDimensionQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTrendingByDimension>>
+>;
+export type GetTrendingByDimensionQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Trending tracks grouped by country or university (7-day window)
+ */
+
+export function useGetTrendingByDimension<
+  TData = Awaited<ReturnType<typeof getTrendingByDimension>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetTrendingByDimensionParams,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getTrendingByDimension>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetTrendingByDimensionQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Personalized rail (connections' likes + same-university trending)
+ */
+export const getGetForYouUrl = () => {
+  return `/api/discovery/for-you`;
+};
+
+export const getForYou = async (options?: RequestInit): Promise<ForYouResponse> => {
+  return customFetch<ForYouResponse>(getGetForYouUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetForYouQueryKey = () => {
+  return [`/api/discovery/for-you`] as const;
+};
+
+export const getGetForYouQueryOptions = <
+  TData = Awaited<ReturnType<typeof getForYou>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getForYou>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetForYouQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getForYou>>> = ({ signal }) =>
+    getForYou({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getForYou>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetForYouQueryResult = NonNullable<Awaited<ReturnType<typeof getForYou>>>;
+export type GetForYouQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Personalized rail (connections' likes + same-university trending)
+ */
+
+export function useGetForYou<
+  TData = Awaited<ReturnType<typeof getForYou>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getForYou>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetForYouQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
