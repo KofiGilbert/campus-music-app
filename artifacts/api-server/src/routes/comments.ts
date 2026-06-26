@@ -3,6 +3,7 @@ import { and, count, desc, eq, isNull, lt } from "drizzle-orm";
 import { db, comments, posts, tracks, commentLikes } from "@workspace/db";
 import { optionalAuth, requireAuth, requireVerified } from "../middlewares/auth";
 import { shapeComment, shapeComments } from "../lib/commentShape";
+import { extractMentions, extractHashtags } from "../lib/mentions";
 
 const router: IRouter = Router();
 
@@ -96,6 +97,10 @@ router.post("/comments", requireAuth, requireVerified, async (req, res): Promise
     })
     .returning();
 
+  req.log.info(
+    { commentId: comment.id, mentions: extractMentions(body), hashtags: extractHashtags(body) },
+    "Comment created",
+  );
   res.status(201).json(await shapeComment(comment, userId));
 });
 

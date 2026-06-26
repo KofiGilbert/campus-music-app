@@ -3,6 +3,7 @@ import { and, count, desc, eq, isNull, lt } from "drizzle-orm";
 import { db, posts, tracks, postLikes, postShares } from "@workspace/db";
 import { optionalAuth, requireAuth, requireVerified } from "../middlewares/auth";
 import { shapePost, shapePosts } from "../lib/postShape";
+import { extractMentions, extractHashtags } from "../lib/mentions";
 
 const router: IRouter = Router();
 
@@ -79,7 +80,16 @@ router.post("/posts", requireAuth, requireVerified, async (req, res): Promise<vo
     })
     .returning();
 
-  req.log.info({ postId: post.id, userId, type: postType }, "Post created");
+  req.log.info(
+    {
+      postId: post.id,
+      userId,
+      type: postType,
+      mentions: extractMentions(bodyText),
+      hashtags: extractHashtags(bodyText),
+    },
+    "Post created",
+  );
   res.status(201).json(await shapePost(post, userId));
 });
 
