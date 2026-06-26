@@ -45,6 +45,7 @@ export interface UserProfile {
   university: string;
   country: string;
   avatarUrl?: string | null;
+  emailVerified: boolean;
 }
 
 export interface AuthResponse {

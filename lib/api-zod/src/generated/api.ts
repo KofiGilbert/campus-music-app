@@ -82,6 +82,7 @@ export const LoginResponse = zod.object({
     university: zod.string(),
     country: zod.string(),
     avatarUrl: zod.string().nullish(),
+    emailVerified: zod.boolean(),
   }),
 });
 
@@ -143,6 +144,7 @@ export const GetMeResponse = zod.object({
   university: zod.string(),
   country: zod.string(),
   avatarUrl: zod.string().nullish(),
+  emailVerified: zod.boolean(),
 });
 
 /**
@@ -163,6 +165,7 @@ export const UpdateMeResponse = zod.object({
   university: zod.string(),
   country: zod.string(),
   avatarUrl: zod.string().nullish(),
+  emailVerified: zod.boolean(),
 });
 
 /**

@@ -36,6 +36,7 @@ function buildUserResponse(user: {
   university: string | null;
   country: string | null;
   avatarUrl?: string | null;
+  emailVerified: boolean;
 }) {
   return {
     id: user.id,
@@ -45,6 +46,7 @@ function buildUserResponse(user: {
     university: user.university ?? "",
     country: user.country ?? "",
     avatarUrl: user.avatarUrl ?? null,
+    emailVerified: user.emailVerified,
   };
 }
 

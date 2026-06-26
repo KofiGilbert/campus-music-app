@@ -1345,6 +1345,8 @@ components:
         avatarUrl:
           type: string
           nullable: true
+        emailVerified:
+          type: boolean
       required:
         - id
         - email
@@ -1352,6 +1354,7 @@ components:
         - role
         - university
         - country
+        - emailVerified
 
     LikeBody:
       type: object

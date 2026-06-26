@@ -1,4 +1,7 @@
 import { Router, type IRouter } from "express";
+import { eq } from "drizzle-orm";
+import { db, users } from "@workspace/db";
+import { emailService, otpEmailTemplate } from "@workspace/email";
 import { authLimiter } from "../middlewares/rateLimit";
 
 const router: IRouter = Router();
@@ -17,7 +20,7 @@ function generateCode(): string {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
-router.post("/auth/otp/send", authLimiter, (req, res): void => {
+router.post("/auth/otp/send", authLimiter, async (req, res): Promise<void> => {
   const { email } = req.body as { email?: unknown };
 
   if (typeof email !== "string" || !email.includes("@")) {
@@ -28,15 +31,23 @@ router.post("/auth/otp/send", authLimiter, (req, res): void => {
   const code = generateCode();
   otpStore.set(email.toLowerCase(), { code, expiresAt: Date.now() + OTP_TTL_MS });
 
-  req.log.info({ email }, "OTP generated");
+  try {
+    await emailService.sendEmail({ to: email, ...otpEmailTemplate(code) });
+  } catch (err) {
+    req.log.error({ err }, "Failed to send OTP email");
+    res.status(500).json({ error: "Failed to send verification code" });
+    return;
+  }
 
-  // In production this would send a real email. For development we expose the
-  // code in the response so clients can verify the flow without a mail server.
+  req.log.info({ email }, "OTP sent");
+
+  // devCode is exposed only outside production, so the flow can be tested without
+  // a real inbox; it is never returned in production.
   const isDev = process.env.NODE_ENV !== "production";
   res.json({ sent: true, ...(isDev ? { devCode: code } : {}) });
 });
 
-router.post("/auth/otp/verify", authLimiter, (req, res): void => {
+router.post("/auth/otp/verify", authLimiter, async (req, res): Promise<void> => {
   const { email, code } = req.body as { email?: unknown; code?: unknown };
 
   if (typeof email !== "string" || !email || typeof code !== "string" || !code) {
@@ -63,6 +74,14 @@ router.post("/auth/otp/verify", authLimiter, (req, res): void => {
   }
 
   otpStore.delete(email.toLowerCase());
+
+  // Mark the email verified for the matching user. No-op if the user doesn't
+  // exist yet (e.g. OTP requested before registration completes).
+  await db
+    .update(users)
+    .set({ emailVerified: true, updatedAt: new Date() })
+    .where(eq(users.email, email.toLowerCase()));
+
   req.log.info({ email }, "OTP verified");
   res.json({ verified: true });
 });

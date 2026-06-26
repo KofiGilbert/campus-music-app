@@ -1,7 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { eq, desc, and, sql, count, inArray } from "drizzle-orm";
 import { db, tracks, userLikes, userLibrary, userPlayback, users } from "@workspace/db";
-import { optionalAuth, requireAuth } from "../middlewares/auth";
+import { optionalAuth, requireAuth, requireVerified } from "../middlewares/auth";
 import { ObjectStorageService } from "../lib/objectStorage";
 import { verifyUploadOwner, consumeUploadRecord } from "../lib/uploadRegistry";
 
@@ -37,7 +37,7 @@ async function getLikeCount(trackId: string): Promise<number> {
   return row?.cnt ?? 0;
 }
 
-router.post("/tracks", requireAuth, async (req, res): Promise<void> => {
+router.post("/tracks", requireAuth, requireVerified, async (req, res): Promise<void> => {
   const userId = req.userId!; // guaranteed by requireAuth
   // Artist-only — token-side gate before the DB hit (role is in the JWT claim).
   if (req.auth!.role !== "artist") {
