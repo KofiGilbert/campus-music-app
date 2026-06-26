@@ -175,6 +175,122 @@ export interface Track {
   processingStatus?: TrackProcessingStatus;
 }
 
+export interface PostAuthor {
+  id: string;
+  username: string;
+  name: string;
+  /** @nullable */
+  avatarUrl?: string | null;
+  role: string;
+}
+
+export type PostType = (typeof PostType)[keyof typeof PostType];
+
+export const PostType = {
+  original: "original",
+  repost: "repost",
+  quote: "quote",
+} as const;
+
+export interface Post {
+  id: string;
+  author?: PostAuthor | null;
+  body: string;
+  type: PostType;
+  attachedTrack?: Track | null;
+  /** @nullable */
+  attachedImageUrl?: string | null;
+  originalPost?: Post | null;
+  likeCount: number;
+  commentCount: number;
+  shareCount: number;
+  repostCount: number;
+  /** @nullable */
+  hasLiked?: boolean | null;
+  /** @nullable */
+  hasReposted?: boolean | null;
+  createdAt: string;
+}
+
+export interface FeedResponse {
+  items: Post[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
+export type CreatePostBodyType = (typeof CreatePostBodyType)[keyof typeof CreatePostBodyType];
+
+export const CreatePostBodyType = {
+  original: "original",
+  repost: "repost",
+  quote: "quote",
+} as const;
+
+export interface CreatePostBody {
+  body?: string;
+  attachedTrackId?: string;
+  attachedImageUrl?: string;
+  type?: CreatePostBodyType;
+  originalPostId?: string;
+}
+
+export interface CommentAuthor {
+  id: string;
+  username: string;
+  name: string;
+  /** @nullable */
+  avatarUrl?: string | null;
+}
+
+export interface Comment {
+  id: string;
+  author?: CommentAuthor | null;
+  body: string;
+  /** @nullable */
+  parentCommentId?: string | null;
+  replyCount: number;
+  likeCount: number;
+  /** @nullable */
+  hasLiked?: boolean | null;
+  replies: Comment[];
+  createdAt: string;
+}
+
+export interface CommentsResponse {
+  items: Comment[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
+export type CreateCommentBodyTargetType =
+  (typeof CreateCommentBodyTargetType)[keyof typeof CreateCommentBodyTargetType];
+
+export const CreateCommentBodyTargetType = {
+  post: "post",
+  track: "track",
+} as const;
+
+export interface CreateCommentBody {
+  targetType?: CreateCommentBodyTargetType;
+  targetId?: string;
+  body: string;
+  parentCommentId?: string;
+}
+
+export interface LikeToggleResponse {
+  liked: boolean;
+  likeCount: number;
+}
+
+export interface ShareBody {
+  platform?: string;
+}
+
+export interface ShareResponse {
+  shareCount: number;
+  deepLink: string;
+}
+
 export interface Artist {
   id: string;
   name: string;
@@ -443,7 +559,28 @@ export type GetFollowersParams = {
 
 export type GetFeedParams = {
   limit?: number;
+  cursor?: string;
 };
+
+export type GetUserPostsParams = {
+  limit?: number;
+  cursor?: string;
+};
+
+export type GetCommentsParams = {
+  targetType: GetCommentsTargetType;
+  targetId: string;
+  limit?: number;
+  cursor?: string;
+};
+
+export type GetCommentsTargetType =
+  (typeof GetCommentsTargetType)[keyof typeof GetCommentsTargetType];
+
+export const GetCommentsTargetType = {
+  post: "post",
+  track: "track",
+} as const;
 
 export type SearchParams = {
   /**

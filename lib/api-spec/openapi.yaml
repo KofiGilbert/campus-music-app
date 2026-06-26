@@ -838,22 +838,305 @@ paths:
     get:
       operationId: getFeed
       tags: [feed]
-      summary: Get social feed (trending tracks sorted by play count)
+      summary: Cursor-paginated post feed (follows + connections + global fallback)
       parameters:
         - in: query
           name: limit
           schema:
             type: integer
-          required: false
+        - in: query
+          name: cursor
+          schema:
+            type: string
       responses:
         "200":
-          description: Feed tracks
+          description: Feed
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Track"
+                $ref: "#/components/schemas/FeedResponse"
+
+  /posts:
+    post:
+      operationId: createPost
+      tags: [posts]
+      summary: Create a post (original / quote / repost)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePostBody"
+      responses:
+        "201":
+          description: Created post
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Post"
+        "400":
+          description: Invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /posts/{id}:
+    get:
+      operationId: getPost
+      tags: [posts]
+      summary: Get a single post
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Post
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Post"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deletePost
+      tags: [posts]
+      summary: Soft-delete own post
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "204":
+          description: Deleted
+
+  /posts/{id}/like:
+    post:
+      operationId: togglePostLike
+      tags: [posts]
+      summary: Toggle a post like
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Like toggled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LikeToggleResponse"
+
+  /posts/{id}/share:
+    post:
+      operationId: sharePost
+      tags: [posts]
+      summary: Record a post share
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShareBody"
+      responses:
+        "200":
+          description: Shared
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShareResponse"
+
+  /posts/{id}/repost:
+    post:
+      operationId: repost
+      tags: [posts]
+      summary: Repost a post
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "201":
+          description: Repost created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Post"
+        "409":
+          description: Already reposted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /posts/{id}/unrepost:
+    delete:
+      operationId: unrepost
+      tags: [posts]
+      summary: Remove the viewer's repost of a post
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "204":
+          description: Unreposted
+
+  /users/{id}/posts:
+    get:
+      operationId: getUserPosts
+      tags: [posts]
+      summary: Cursor-paginated posts by a user
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+        - in: query
+          name: limit
+          schema:
+            type: integer
+        - in: query
+          name: cursor
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Posts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeedResponse"
+
+  /comments:
+    post:
+      operationId: createComment
+      tags: [comments]
+      summary: Comment on a post or track (or reply)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCommentBody"
+      responses:
+        "201":
+          description: Created comment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Comment"
+        "400":
+          description: Invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      operationId: getComments
+      tags: [comments]
+      summary: Cursor-paginated comments on a target
+      parameters:
+        - in: query
+          name: targetType
+          schema:
+            type: string
+            enum: [post, track]
+          required: true
+        - in: query
+          name: targetId
+          schema:
+            type: string
+          required: true
+        - in: query
+          name: limit
+          schema:
+            type: integer
+        - in: query
+          name: cursor
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Comments
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommentsResponse"
+
+  /comments/{id}:
+    delete:
+      operationId: deleteComment
+      tags: [comments]
+      summary: Soft-delete own comment
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "204":
+          description: Deleted
+
+  /comments/{id}/like:
+    post:
+      operationId: toggleCommentLike
+      tags: [comments]
+      summary: Toggle a comment like
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Like toggled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LikeToggleResponse"
 
   /search:
     get:
@@ -1555,6 +1838,206 @@ components:
         - playCount
         - likes
         - university
+
+    PostAuthor:
+      type: object
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        name:
+          type: string
+        avatarUrl:
+          type: ["string", "null"]
+        role:
+          type: string
+      required:
+        - id
+        - username
+        - name
+        - role
+
+    Post:
+      type: object
+      properties:
+        id:
+          type: string
+        author:
+          oneOf:
+            - $ref: "#/components/schemas/PostAuthor"
+            - type: "null"
+        body:
+          type: string
+        type:
+          type: string
+          enum: [original, repost, quote]
+        attachedTrack:
+          oneOf:
+            - $ref: "#/components/schemas/Track"
+            - type: "null"
+        attachedImageUrl:
+          type: ["string", "null"]
+        originalPost:
+          oneOf:
+            - $ref: "#/components/schemas/Post"
+            - type: "null"
+        likeCount:
+          type: integer
+        commentCount:
+          type: integer
+        shareCount:
+          type: integer
+        repostCount:
+          type: integer
+        hasLiked:
+          type: ["boolean", "null"]
+        hasReposted:
+          type: ["boolean", "null"]
+        createdAt:
+          type: string
+      required:
+        - id
+        - body
+        - type
+        - likeCount
+        - commentCount
+        - shareCount
+        - repostCount
+        - createdAt
+
+    FeedResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Post"
+        nextCursor:
+          type: ["string", "null"]
+      required:
+        - items
+        - nextCursor
+
+    CreatePostBody:
+      type: object
+      properties:
+        body:
+          type: string
+        attachedTrackId:
+          type: string
+        attachedImageUrl:
+          type: string
+        type:
+          type: string
+          enum: [original, repost, quote]
+        originalPostId:
+          type: string
+
+    CommentAuthor:
+      type: object
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        name:
+          type: string
+        avatarUrl:
+          type: ["string", "null"]
+      required:
+        - id
+        - username
+        - name
+
+    Comment:
+      type: object
+      properties:
+        id:
+          type: string
+        author:
+          oneOf:
+            - $ref: "#/components/schemas/CommentAuthor"
+            - type: "null"
+        body:
+          type: string
+        parentCommentId:
+          type: ["string", "null"]
+        replyCount:
+          type: integer
+        likeCount:
+          type: integer
+        hasLiked:
+          type: ["boolean", "null"]
+        replies:
+          type: array
+          items:
+            $ref: "#/components/schemas/Comment"
+        createdAt:
+          type: string
+      required:
+        - id
+        - body
+        - replyCount
+        - likeCount
+        - replies
+        - createdAt
+
+    CommentsResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Comment"
+        nextCursor:
+          type: ["string", "null"]
+      required:
+        - items
+        - nextCursor
+
+    CreateCommentBody:
+      type: object
+      properties:
+        targetType:
+          type: string
+          enum: [post, track]
+        targetId:
+          type: string
+        body:
+          type: string
+        parentCommentId:
+          type: string
+      required:
+        - body
+
+    LikeToggleResponse:
+      type: object
+      properties:
+        liked:
+          type: boolean
+        likeCount:
+          type: integer
+      required:
+        - liked
+        - likeCount
+
+    ShareBody:
+      type: object
+      properties:
+        platform:
+          type: string
+
+    ShareResponse:
+      type: object
+      properties:
+        shareCount:
+          type: integer
+        deepLink:
+          type: string
+      required:
+        - shareCount
+        - deepLink
 
     Artist:
       type: object
