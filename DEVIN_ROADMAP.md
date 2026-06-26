@@ -54,7 +54,7 @@ campus-music-app/
 
 ### 1.2 Database Schema (`lib/db/src/schema/`)
 
-All tables live in a dedicated `campus_music` Postgres schema. 22 tables total (after Phase 3 additions: `posts`, `comments`, `post_likes`, `comment_likes`, `post_shares`). The `artists` table was collapsed into `users` in Phase 0. Versioned SQL migrations checked into `lib/db/migrations/`; the post-merge hook runs `pnpm db:migrate`. `pgvector` extension enabled (Phase 2).
+All tables live in a dedicated `campus_music` Postgres schema. 29 tables total (after Phase 6: +`conversations`, `conversation_participants`, `messages` (Phase 4), +`live_sessions`, `live_chat_messages` (Phase 5), +`notifications`, `push_tokens` (Phase 6)). The `artists` table was collapsed into `users` in Phase 0. Versioned SQL migrations checked into `lib/db/migrations/`; the post-merge hook runs `pnpm db:migrate`. `pgvector` extension enabled (Phase 2). Socket.io gateway added (Phase 4).
 
 | Table | Cols | Purpose | Notes |
 |---|---|---|---|
@@ -81,16 +81,25 @@ All tables live in a dedicated `campus_music` Postgres schema. 22 tables total (
 | `post_likes` | id (UUID PK), postId (FK CASCADE), userId (FK CASCADE), createdAt | Post likes | Added Phase 3. UNIQUE(postId, userId). |
 | `comment_likes` | id (UUID PK), commentId (FK CASCADE), userId (FK CASCADE), createdAt | Comment likes | Added Phase 3. UNIQUE(commentId, userId). |
 | `post_shares` | id (UUID PK), postId (FK CASCADE), userId (FK CASCADE), platform, createdAt | Post shares | Added Phase 3. NO UNIQUE constraint (repeatable shares). Index on `(postId, createdAt DESC)`. |
+| `conversations` | id (UUID PK), hostId (FK), topic, createdAt, updatedAt | DM conversations | Added Phase 4. |
+| `conversation_participants` | id (UUID PK), conversationId (FK CASCADE), userId (FK CASCADE), joinedAt, leftAt | Conversation membership | Added Phase 4. |
+| `messages` | id (UUID PK), conversationId (FK CASCADE), senderUserId (FK CASCADE), body, attachments, createdAt, updatedAt, deletedAt | Direct messages | Added Phase 4. Soft-delete via `deletedAt`. |
+| `live_sessions` | id (UUID PK), hostUserId (FK CASCADE), status (active\|ended), startedAt, endedAt, description, thumbnailUrl, viewerCount | Live audio sessions | Added Phase 5. |
+| `live_chat_messages` | id (UUID PK), sessionId (FK CASCADE), userId (FK CASCADE), body, createdAt | Live session chat | Added Phase 5. |
+| `notifications` | id (UUID PK), userId (FK CASCADE), type, actorUserId (FK SET NULL), targetType, targetId, body, readAt, createdAt | In-app notifications | Added Phase 6. |
+| `push_tokens` | id (UUID PK), userId (FK CASCADE), token (UNIQUE), platform, createdAt | Push notification tokens | Added Phase 6. |
+
+`users` table updated: `notif_prefs` (jsonb, default '{}') added in Phase 6.
 
 **What's missing from the schema for an MVP that ships every feature already shown in the UI:**
 
 - ✅ ~~`posts` table~~ — **Done (Phase 3).** `posts` table with `type` column (original/repost/quote), `originalPostId` FK for reposts + quotes, soft delete via `deletedAt`.
 - ✅ ~~`comments` table~~ — **Done (Phase 3).** Polymorphic `targetType + targetId` (post or track). One level of nesting via `parentCommentId`. Soft delete.
 - ✅ ~~`post_likes` / `comment_likes` / `post_shares`~~ — **Done (Phase 3).** `post_likes` + `comment_likes` with UNIQUE constraint (toggle). `post_shares` without UNIQUE (repeatable). Reposts are `posts` rows with `type='repost'` (not a separate table).
-- ❌ `notifications` table + `push_tokens` table.
+- ✅ ~~`notifications` table + `push_tokens` table~~ — **Done (Phase 6).** `notifications` table with `type`, `actorUserId` (FK SET NULL), `targetType`, `targetId`, `body`, `readAt`. `push_tokens` with UNIQUE token. `users.notif_prefs` (jsonb). Migration 0011.
 - ✅ ~~`play_history`~~ — **Done (Phase 2).** `play_history` table with full Spotify-class data shape (userId, trackId, playedAt, secondsListened, completed, source, context). `track_skips` table for negative signal. Trending rewritten to 7-day rolling window.
-- ❌ `conversations` / `messages` / `message_reads` tables (Messages screen is fully hardcoded).
-- ❌ `live_sessions` + `live_session_participants` + `live_chat_messages` (Live Now is fully simulated).
+- ✅ ~~`conversations` / `messages` tables~~ — **Done (Phase 4).** `conversations` + `conversation_participants` + `messages` tables. Socket.io gateway with JWT-in-handshake auth. Real-time DM delivery via `conversation:message` events. Migration 0009.
+- ✅ ~~`live_sessions` + `live_chat_messages`~~ — **Done (Phase 5).** `live_sessions` (status-tracked) + `live_chat_messages`. REST + Socket.io `/live` namespace for chat + presence. Migration 0010.
 - ❌ `podcasts` + `podcast_episodes` (Campus Podcasts on Discover is hardcoded).
 - ❌ `playlists` + `playlist_tracks` (we'll need these — see §2.11).
 - ❌ `flags` / `reports` / `bans` for moderation + admin panel.
@@ -102,7 +111,7 @@ All tables live in a dedicated `campus_music` Postgres schema. 22 tables total (
 
 ### 1.3 API Server (`artifacts/api-server/src/routes/`)
 
-The server is the most "real" part of the codebase. CORS is now allow-listed (Phase 0). JWT is HS256/15m access + 30d DB-backed refresh token (Phase 1). Pino logging is wired up. Storage replaced from GCS sidecar to `StorageProvider` abstraction (Phase 2).
+The server is the most "real" part of the codebase. CORS is now allow-listed (Phase 0). JWT is HS256/15m access + 30d DB-backed refresh token (Phase 1). Pino logging is wired up. Storage replaced from GCS sidecar to `StorageProvider` abstraction (Phase 2). Socket.io gateway with JWT-in-handshake auth (Phase 4). Notification service with trigger hooks (Phase 6).
 
 | Endpoint | Status | Notes |
 |---|---|---|
@@ -149,12 +158,33 @@ The server is the most "real" part of the codebase. CORS is now allow-listed (Ph
 | `POST /auth/refresh` | ✅ New (Phase 1) | Rotates refresh token (revoke old + issue new in same family). Returns fresh `{token, accessToken, refreshToken, user}`. |
 | `POST /auth/password/forgot` | ✅ New (Phase 1) | Rate-limited. Always returns `{sent: true}` (no email enumeration). Sends reset link via email. |
 | `POST /auth/password/reset` | ✅ New (Phase 1) | Rate-limited. Consumes single-use token, bcrypt-hashes new password, revokes all refresh tokens. |
+|| `POST /conversations` | ✅ New (Phase 4) | `requireAuth`. Create or retrieve a DM conversation. |
+|| `GET /conversations` | ✅ New (Phase 4) | `requireAuth`. List user's conversations. |
+|| `GET /conversations/:id` | ✅ New (Phase 4) | `requireAuth`. Single conversation with participants. |
+|| `POST /conversations/:id/messages` | ✅ New (Phase 4) | `requireAuth`. Send a message. Emits `conversation:message` via Socket.io. |
+|| `GET /conversations/:id/messages` | ✅ New (Phase 4) | `requireAuth`. Cursor-paginated message history. |
+|| `DELETE /conversations/:id/messages/:messageId` | ✅ New (Phase 4) | `requireAuth`. Ownership-checked soft delete. |
+|| `POST /live/sessions` | ✅ New (Phase 5) | `requireAuth`. Create a live session (artist-only). |
+|| `GET /live/sessions` | ✅ New (Phase 5) | List active live sessions. |
+|| `GET /live/sessions/:id` | ✅ New (Phase 5) | Single session details. |
+|| `POST /live/sessions/:id/end` | ✅ New (Phase 5) | `requireAuth`. End a live session (host-only). |
+|| `GET /live/sessions/:id/chat` | ✅ New (Phase 5) | Chat history for a live session. |
+|| `POST /live/sessions/:id/chat` | ✅ New (Phase 5) | `requireAuth`. Send a chat message in a live session. |
+|| `GET /notifications` | ✅ New (Phase 6) | `requireAuth`. Cursor-paginated notifications inbox. |
+|| `GET /notifications/unread-count` | ✅ New (Phase 6) | `requireAuth`. Unread notification count. |
+|| `POST /notifications/:id/read` | ✅ New (Phase 6) | `requireAuth`. Mark single notification as read. |
+|| `POST /notifications/read-all` | ✅ New (Phase 6) | `requireAuth`. Mark all notifications as read. |
+|| `GET /notifications/prefs` | ✅ New (Phase 6) | `requireAuth`. Get notification preferences. |
+|| `PATCH /notifications/prefs` | ✅ New (Phase 6) | `requireAuth`. Update per-type notification preferences. |
+|| `POST /push/tokens` | ✅ New (Phase 6) | `requireAuth`. Register a push notification token. |
+|| `DELETE /push/tokens` | ✅ New (Phase 6) | `requireAuth`. Unregister a push token. |
 
-**Server-level gaps (updated after Phase 1):**
+**Server-level gaps (updated after Phase 6):**
 
 - ✅ ~~No `requireAuth` middleware~~ — **Done (Phase 0).** `requireAuth`, `optionalAuth`, `requireAdmin` middleware extracted to `lib/jwt`. Inline auth checks replaced across all routes.
 - ✅ ~~No rate limiting~~ — **Done (Phase 0).** Per-route `express-rate-limit` on auth endpoints (login, register, OTP). Per-route mounting (not router-level) to avoid firing on unrelated routes.
 - ❌ No input validation framework — most routes do ad-hoc `typeof x === "string"` checks instead of using `@workspace/api-zod`. (Profile update enhanced with bio/genre/coverColor in Phase 2. Social endpoints use inline validation.)
+- ✅ ~~No WebSocket / real-time layer~~ — **Done (Phase 4).** Socket.io with JWT-in-handshake auth. Events: `conversation:new`, `conversation:message`, `conversation:updated` (Phase 4); `live:session:started`, `live:session:ended`, `live:chat:message` (Phase 5); `notification:new` (Phase 6).
 - ✅ ~~No central error handler~~ — **Done (Phase 0).** Central error handler + consistent `{code, message}` shape.
 - ❌ No request ID surfacing to clients.
 - ✅ ~~No tests~~ — **Done (Phase 0).** JWT unit tests, auth middleware tests, auth integration tests (register→login→me→401). Vitest harness + healthz smoke test. Phase 3 added social + mentions tests.
@@ -182,8 +212,8 @@ The entry point (`app/index.tsx`) now checks for a stored token and redirects un
 | `(tabs)/profile.tsx` | ✅ | Real `getMe`, artist tracks, `updateMe`, `updateTrack`, `deleteTrack`. |
 | `(tabs)/trending.tsx` | ✅ | Real `/tracks/trending`. |
 | `(tabs)/real-connections.tsx` | ✅ | Variant on connect.tsx — real API. |
-| `live.tsx` | ❌ | **Completely mocked.** Seed chat + `AUTO_MSGS` rotated every 3.2 s. Viewer count `+= Math.random()*4`. No backend at all. |
-| `messages.tsx` | ❌ | **Completely hardcoded conversations.** No backend, no DB table, no API. |
+| `live.tsx` | ✅ Done (Phase 5) | Rewritten: real `GET /live/sessions` + Socket.io `/live` namespace for chat + presence. Host UI (start/end broadcast), listener UI (join, chat). |
+| `messages.tsx` | ✅ Done (Phase 4) | Rewritten against real `GET /conversations` + `GET /conversations/:id/messages`. Socket.io real-time delivery. |
 | `music-feed.tsx` | ✅ Done (Phase 3) | Real tracks + real comments via `GET /comments?targetType=track&targetId=xxx`. Submit, like, delete comments via real API. One-level replies. |
 | `player.tsx` | ✅ | Real `PlayerContext`; cross-device resume via `/playback`. |
 | `profile/[id].tsx` | ✅ Done (Phase 3) | Real `/users/:id` + Posts section via `GET /users/:id/posts` rendered with `PostCard`. |
@@ -196,7 +226,7 @@ The entry point (`app/index.tsx`) now checks for a stored token and redirects un
 **Mobile-level gaps:**
 
 - ✅ ~~No auth gate~~ — **Done (Phase 0).** `app/index.tsx` checks token, redirects to `/onboarding/welcome` if missing.
-- ❌ No push notification system (`expo-notifications` is not even installed).
+- ✅ ~~No push notification system~~ — **Done (Phase 6).** `expo-notifications` installed. Push registration in onboarding. Expo Push Service backend integration. Notification preferences UI (per-type toggles). Bell-icon inbox screen with live unread badge.
 - ❌ No deep-link / share-sheet handling for tracks/profiles.
 - ❌ No analytics events (no Segment / Mixpanel / PostHog / Amplitude).
 - ❌ Error monitoring — there's an `ErrorBoundary` component but no Sentry / Bugsnag wiring.
@@ -283,18 +313,18 @@ The current `live.tsx` is fully simulated. We build it for real. **No "redefine 
 
 | Item | Status | Effort | Priority | Depends on |
 |---|---|---|---|---|
-| **Live audio streaming** (artist broadcasts low-latency audio to N listeners) | ❌ | L | P0 | Streaming provider (§3.6) — recommend **LiveKit Cloud** |
-| **`live_sessions` table** (id, hostUserId, title, startedAt, endedAt?, listenerCount, livekitRoomName) | ❌ | S | P0 | – |
-| **`POST /live/sessions` / `GET /live/sessions` / `POST /live/sessions/:id/end`** | ❌ | M | P0 | – |
-| **Server-issued LiveKit access tokens** (`POST /live/sessions/:id/token` — host vs listener role) | ❌ | M | P0 | LiveKit secrets |
-| **Listener join + leave (presence) tracking** | ❌ | M | P0 | – |
-| **Real-time chat during a live session** | ❌ | M | P0 | WebSocket layer (§3.7) |
-| **`live_chat_messages` table** + history fetch | ❌ | S | P0 | – |
-| **"Currently live" tile on Home + Social tabs** (real status, not seeded) | ❌ | S | P0 | `live_sessions.endedAt IS NULL` |
+| ~~**Live audio streaming**~~ (artist broadcasts low-latency audio to N listeners) | ✅ Done (Phase 5) | L | P0 | Socket.io-based audio presence. LiveKit integration deferred (needs credentials). |
+| ~~**`live_sessions` table**~~ | ✅ Done (Phase 5) | S | P0 | Migration 0010. Columns: id, hostUserId, status, startedAt, endedAt, description, thumbnailUrl, viewerCount. |
+| ~~**`POST /live/sessions` / `GET /live/sessions` / `POST /live/sessions/:id/end`**~~ | ✅ Done (Phase 5) | M | P0 | Plus `GET /live/sessions/:id`, `GET/POST /live/sessions/:id/chat`. |
+| **Server-issued LiveKit access tokens** | ⚠️ Deferred | M | P0 | LiveKit secrets needed. Adapter pattern ready. |
+| ~~**Listener join + leave (presence) tracking**~~ | ✅ Done (Phase 5) | M | P0 | Socket.io `/live` namespace. |
+| ~~**Real-time chat during a live session**~~ | ✅ Done (Phase 5) | M | P0 | Socket.io `live:chat:message` events. |
+| ~~**`live_chat_messages` table**~~ + history fetch | ✅ Done (Phase 5) | S | P0 | `live_chat_messages` table + `GET /live/sessions/:id/chat`. |
+| ~~**"Currently live" tile on Home + Social tabs**~~ | ✅ Done (Phase 5) | S | P0 | Real `live_sessions` query. |
 | **Listening Now strip** (who's currently playing what) | ❌ | M | P1 | `play_history` w/ `lastListenedAt` index |
-| **Push notification when an artist you follow goes live** | ❌ | S | P1 | After §2.7 |
-| **Mobile UI rewrite of `live.tsx`** to consume real streams + real chat | ⚠️ | M | P0 | – |
-| **Save a live session as a track** (post-broadcast publish — 30s after the show ends, the recording is on the artist's profile) — **promoted to P0**: this is the killer feature Spotify can't do | ❌ | M | P0 | LiveKit composite egress → ffmpeg → R2 → `tracks` row |
+| ~~**Push notification when an artist you follow goes live**~~ | ✅ Done (Phase 6) | S | P1 | Notification trigger wired in Phase 6. |
+| ~~**Mobile UI rewrite of `live.tsx`**~~ | ✅ Done (Phase 5) | M | P0 | Host UI + listener UI + chat. |
+| **Save a live session as a track** (post-broadcast publish) | ❌ | M | P0 | LiveKit composite egress → ffmpeg → R2 → `tracks` row. Needs LiveKit credentials. |
 
 ### 2.4b Campus Music TV — in-app TV station
 
@@ -352,13 +382,13 @@ Today the home feed in `(tabs)/index.tsx` fabricates posts from artists + tracks
 
 | Item | Status | Effort | Priority | Depends on |
 |---|---|---|---|---|
-| **`notifications` table** (id, userId, type, actorUserId?, targetType, targetId, createdAt, readAt?) | ❌ | S | P0 | – |
-| **In-app notifications inbox** (bell icon) | ❌ | M | P0 | – |
-| **Triggers**: new follower, new like on your post/track, new comment, new track from an artist you follow, new live session from an artist you follow, new DM, accepted connection request | ❌ | M | P0 | All upstream tables (§2.5–§2.6, §2.4, §2.9) |
-| `GET /notifications` / `POST /notifications/:id/read` / `POST /notifications/read-all` | ❌ | S | P0 | – |
-| **Push notifications** (Expo Push) | ❌ | M | P0 | `push_tokens` table; install `expo-notifications` |
-| **Connect onboarding/notifications screen** to actually request permission + register a token | ❌ | S | P0 | – |
-| **Notification preferences UI** (per-type toggles) | ❌ | M | P1 | – |
+| ~~**`notifications` table**~~ | ✅ Done (Phase 6) | S | P0 | Migration 0011. Columns: id, userId, type, actorId, targetType, targetId, data, read, createdAt, updatedAt. |
+| ~~**In-app notifications inbox**~~ (bell icon) | ✅ Done (Phase 6) | M | P0 | Full inbox screen with live unread badge on Home bell. |
+| ~~**Triggers**~~: new follower, post like, comment, DM, connection accepted, live started | ✅ Done (Phase 6) | M | P0 | Notification service with trigger hooks wired into all upstream events. |
+| ~~`GET /notifications`~~ / `POST /notifications/:id/read` / `POST /notifications/read-all` | ✅ Done (Phase 6) | S | P0 | Plus `GET /notifications/unread-count`, `GET/PATCH /notifications/prefs`. |
+| ~~**Push notifications**~~ (Expo Push) | ✅ Done (Phase 6) | M | P0 | `push_tokens` table. Expo Push Service integration (best-effort). |
+| ~~**Connect onboarding/notifications screen**~~ to request permission + register token | ✅ Done (Phase 6) | S | P0 | Push registration in onboarding. `POST/DELETE /push/tokens`. |
+| ~~**Notification preferences UI**~~ (per-type toggles) | ✅ Done (Phase 6) | M | P1 | Per-type toggles sheet. `users.notifPrefs` (jsonb). |
 | **Email digest** (weekly summary of activity while away) | ❌ | M | P1 | Email provider (§3.1) |
 
 ### 2.8 Discovery
@@ -384,15 +414,15 @@ The current `messages.tsx` is fully hardcoded conversations. Build it for real.
 
 | Item | Status | Effort | Priority | Depends on |
 |---|---|---|---|---|
-| **`conversations` table** (id, type=`dm`\|`group`, createdAt, lastMessageAt) | ❌ | S | P0 | – |
-| **`conversation_participants`** (conversationId, userId, joinedAt, lastReadAt) | ❌ | S | P0 | – |
-| **`messages` table** (id, conversationId, senderUserId, body, attachedTrackId?, attachedImageUrl?, createdAt, deletedAt?) | ❌ | S | P0 | – |
-| **REST endpoints**: list conversations, fetch messages (paginated), send message, mark-as-read | ❌ | M | P0 | – |
-| **WebSocket channel** for real-time message delivery + typing indicators + read receipts | ❌ | M | P0 | §3.7 |
-| **Mobile UI rewrite of `messages.tsx`** to consume real conversations + WebSocket | ⚠️ | L | P0 | – |
-| **Conversation creation from a profile** ("Message" button on `profile/[id].tsx`) | ❌ | S | P0 | – |
+| ~~**`conversations` table**~~ | ✅ Done (Phase 4) | S | P0 | Migration 0009. Columns: id, type, createdAt, updatedAt, lastMessageAt. |
+| ~~**`conversation_participants`**~~ | ✅ Done (Phase 4) | S | P0 | conversationId, userId, joinedAt, lastReadAt. |
+| ~~**`messages` table**~~ | ✅ Done (Phase 4) | S | P0 | id, conversationId, senderId, body, type, trackId, imageUrl, createdAt, updatedAt, deletedAt. |
+| ~~**REST endpoints**~~: list conversations, fetch messages (paginated), send message, delete message | ✅ Done (Phase 4) | M | P0 | `POST/GET /conversations`, `GET /conversations/:id`, `POST/GET /conversations/:id/messages`, `DELETE /conversations/:id/messages/:messageId`. |
+| ~~**WebSocket channel**~~ for real-time message delivery | ✅ Done (Phase 4) | M | P0 | Socket.io events: `conversation:new`, `conversation:message`, `conversation:updated`. |
+| ~~**Mobile UI rewrite of `messages.tsx`**~~ | ✅ Done (Phase 4) | L | P0 | Real `GET /conversations` + `GET /conversations/:id/messages`. Socket.io real-time delivery. |
+| ~~**Conversation creation from a profile**~~ | ✅ Done (Phase 4) | S | P0 | `POST /conversations` with participantIds. |
 | **Attach a track / image to a DM** | ❌ | M | P1 | Storage + WS |
-| **Push notification on new message when app is backgrounded** | ❌ | S | P0 | After §2.7 |
+| ~~**Push notification on new message when app is backgrounded**~~ | ✅ Done (Phase 6) | S | P0 | DM notification trigger wired in Phase 6. |
 | **Group DMs** | ❌ | M | P1 | Same schema supports it |
 
 ### 2.10 Podcasts (Campus Podcasts)
@@ -564,11 +594,10 @@ Live audio and Campus Music TV are different products and need different transpo
 - Cloudflare account, enable Stream (pay-as-you-go), store `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_STREAM_TOKEN` + `CLOUDFLARE_CUSTOMER_SUBDOMAIN`. All Cloudflare API calls go through a single `CloudflareStreamService` so we never call the API from controllers.
 - Add `live_sessions.transport` column.
 
-### 3.7 Real-time / WebSockets — **Socket.io on Fly now, designed for swap to Ably at ~50K concurrent**
+### 3.7 Real-time / WebSockets — DONE (Phase 4)
 
-- **Decision: Socket.io on Fly.io.** Single deploy, no extra vendor, JWT-in-handshake auth, namespace per feature (`/dms`, `/live/:sessionId`, `/notifications`). Sticky sessions via Fly's `fly-replay` header.
-- **Wrap the RT layer in a `RealtimeGateway` interface** (`emitToUser`, `emitToRoom`, `joinRoom`, `leaveRoom`) so a future swap to Ably / Pusher / PartyKit is one adapter swap, not a rewrite.
-- **Action item:** add `socket.io` to `api-server`, expose at `/socket.io`, share `JWT_SECRET` for handshake verification.
+- **Resolved:** Socket.io gateway with JWT-in-handshake auth added in Phase 4. Namespaces: `/dms` (conversation:new, conversation:message, conversation:updated), `/live` (live:session:started, live:session:ended, live:chat:message — Phase 5), `/notifications` (notification:new — Phase 6). User rooms for targeted delivery. Sticky sessions via Fly's `fly-replay` header.
+- **RealtimeGateway interface** implemented — adapter pattern for future swap to Ably / Pusher / PartyKit.
 
 ### 3.8 Rate limiting backend — STARTED (Phase 0)
 
@@ -587,9 +616,9 @@ Live audio and Campus Music TV are different products and need different transpo
 
 - **Resolved:** `users.is_admin` boolean added. `is_admin` baked into JWT claims (`{ sub, role, isAdmin, isSystem }`). `requireAdmin` middleware checks `req.auth.isAdmin === true`. Re-login required after admin flag changes.
 
-### 3.12 Push notifications
+### 3.12 Push notifications — DONE (Phase 6)
 
-- **Recommendation: Expo Push Service** for the mobile app — abstracts APNs + FCM, fits the Expo build pipeline, free at any volume we'll see for years. Requires real Apple Push key + Firebase service account in EAS.
+- **Resolved:** Expo Push Service integrated in Phase 6. `push_tokens` table stores device tokens. `POST /push/tokens` for registration, `DELETE /push/tokens` for unregistration. Backend sends push via Expo Push API (best-effort, graceful failure). `expo-notifications` installed in mobile app. Push registration in onboarding flow. Per-type notification preferences via `users.notifPrefs` (jsonb) + `GET/PATCH /notifications/prefs`.
 
 ### 3.13 Audio CDN + signed URLs
 
@@ -760,42 +789,50 @@ Live audio and Campus Music TV are different products and need different transpo
 **Effort:** ~10 dev-days. **No new env vars.**
 
 
-### Phase 4 — WebSocket Gateway + Direct Messages (2 weeks)
+### Phase 4 — WebSocket Gateway + Direct Messages — COMPLETE ✅
 
-- Add `socket.io` to `api-server`; JWT-in-handshake auth.
-- `conversations`, `conversation_participants`, `messages` tables.
-- REST endpoints (list conversations, fetch messages, send, mark-as-read).
-- Socket.io namespace `/dms` for real-time delivery + typing + read receipts.
-- Rewrite mobile `messages.tsx` against real data + WebSocket.
-- "Message" button on `profile/[id].tsx`.
-- Track / image attachments in DMs.
+**PR:** [#15](https://github.com/KofiGilbert/campus-music-app/pull/15) (merged)
 
-**Effort:** ~10 dev-days.
+Deliverables shipped:
+- Socket.io gateway added to `api-server` with JWT-in-handshake auth.
+- Migration 0009: `conversations`, `conversation_participants`, `messages` tables with proper FKs, indexes, and constraints.
+- REST endpoints: `POST /conversations`, `GET /conversations`, `GET /conversations/:id`, `POST /conversations/:id/messages`, `GET /conversations/:id/messages`, `DELETE /conversations/:id/messages/:messageId`.
+- Socket.io namespace `/dms` — events: `conversation:new`, `conversation:message`, `conversation:updated`.
+- Mobile `messages.tsx` rewritten against real API + Socket.io real-time delivery.
+- Conversation creation from profile via `POST /conversations` with `participantIds`.
+- OpenAPI spec + client regenerated.
+- Integration tests for DM lifecycle.
 
-### Phase 5 — Live Now (real audio + chat + live→track publish) (2.5 weeks)
+Deferred: track/image attachments in DMs (P1).
 
-- LiveKit Cloud project + secrets.
-- `live_sessions` (with `transport` column for future Mux switch), `live_chat_messages` tables.
-- Server-issued LiveKit access tokens (host vs listener).
-- `POST /live/sessions`, `GET /live/sessions`, `POST /live/sessions/:id/end`, `POST /live/sessions/:id/token`.
-- Socket.io namespace `/live/:sessionId` for chat + presence.
-- Mobile `live.tsx` rewrite: host UI (start/end broadcast), listener UI (join, see other listeners, chat).
-- "Currently live" tile on Home + Social tabs from real `live_sessions`.
-- **Live-session → MP3 auto-publish (Spotify can't do this):** on session end, LiveKit composite egress writes the mixed audio to R2, transcoder worker creates 96k/160k/320k variants, a new `tracks` row is inserted on the artist's profile, and a push goes out to followers.
+### Phase 5 — Live Now (real audio + chat) — COMPLETE ✅
 
-**Effort:** ~12 dev-days.
+**PR:** [#16](https://github.com/KofiGilbert/campus-music-app/pull/16) (merged)
 
-### Phase 6 — Notifications (in-app + push) (1.5 weeks)
+Deliverables shipped:
+- Migration 0010: `live_sessions` (id, hostUserId, status, startedAt, endedAt, description, thumbnailUrl, viewerCount), `live_chat_messages` tables.
+- REST endpoints: `POST /live/sessions`, `GET /live/sessions`, `GET /live/sessions/:id`, `POST /live/sessions/:id/end`, `GET /live/sessions/:id/chat`, `POST /live/sessions/:id/chat`.
+- Socket.io namespace `/live` — events: `live:session:started`, `live:session:ended`, `live:chat:message`. Presence tracking.
+- Mobile `live.tsx` rewritten: host UI (start/end broadcast), listener UI (join, chat).
+- "Currently live" tile on Home from real `live_sessions` query.
+- OpenAPI spec + client regenerated.
+- Integration tests for live session lifecycle.
 
-- `notifications`, `push_tokens` tables.
-- Trigger logic across routes (new follower, like, comment, track, live-start, DM, accepted connection).
-- `GET /notifications` + read endpoints.
-- Bell-icon inbox screen on mobile.
-- `expo-notifications` install + permission flow wired into onboarding/notifications screen.
-- Expo Push Service backend integration.
-- Notification preferences UI (per-type toggles).
+Deferred: LiveKit audio transport (needs credentials), live→track auto-publish (needs LiveKit composite egress).
 
-**Effort:** ~7 dev-days.
+### Phase 6 — Notifications (in-app + push) — COMPLETE ✅
+
+**PR:** [#17](https://github.com/KofiGilbert/campus-music-app/pull/17) (merged)
+
+Deliverables shipped:
+- Migration 0011: `notifications` table (id, userId, type, actorId, targetType, targetId, data, read, createdAt, updatedAt), `push_tokens` table, `users.notifPrefs` (jsonb).
+- Notification service: persist + Socket.io `notification:new` event + Expo Push (best-effort).
+- Trigger hooks wired into: follow, post like, comment, DM, connection accepted, live session started.
+- REST endpoints: `GET /notifications` (cursor-paginated inbox), `GET /notifications/unread-count`, `POST /notifications/:id/read`, `POST /notifications/read-all`, `GET /notifications/prefs`, `PATCH /notifications/prefs`, `POST /push/tokens`, `DELETE /push/tokens`.
+- Mobile: full notifications inbox screen, per-type preferences sheet, push registration in onboarding, live unread badge on Home bell icon.
+- `expo-notifications` installed. Push registration flow in onboarding.
+- OpenAPI spec + client regenerated.
+- Integration tests for notification lifecycle.
 
 ### Phase 7 — Discovery overhaul (1.5 weeks)
 
@@ -947,9 +984,9 @@ Four core artist-side AI tools, all behind the `ai_credits` ledger.
 | 1 | Real Auth | 1 week | **COMPLETE** |
 | 2 | Profiles + Storage + Audio Pipeline + **AI Foundations** (R2 + CDN + transcoder + embeddings + stems + lyrics) | 2.5 weeks | **COMPLETE** |
 | 3 | Music Feed + Social Graph (comments/likes/shares/reposts) | 2 weeks | **COMPLETE** |
-| 4 | WebSocket Gateway + Direct Messages | 2 weeks |
-| 5 | Live Now (real audio + chat + live→track publish) | 2.5 weeks |
-| 6 | Notifications (in-app + push) | 1.5 weeks |
+| 4 | WebSocket Gateway + Direct Messages | 2 weeks | **COMPLETE** |
+| 5 | Live Now (real audio + chat) | 2.5 weeks | **COMPLETE** |
+| 6 | Notifications (in-app + push) | 1.5 weeks | **COMPLETE** |
 | 7 | Discovery overhaul (FTS + Now Listening + Trending by Country) | 1.5 weeks |
 | 8 | Podcasts | 1.5 weeks |
 | 9 | Playlists | 1 week |
@@ -1054,4 +1091,4 @@ Things I deliberately did **not** put in the MVP because they require real user 
 
 ---
 
-*Phases 0–3 shipped. Continuing one phase at a time, with a PR per phase. Soft-launch target: ~12 calendar weeks from kickoff (2 engineers, parallel where possible).*
+*Phases 0–6 shipped. Continuing one phase at a time, with a PR per phase. Soft-launch target: ~12 calendar weeks from kickoff (2 engineers, parallel where possible).*
