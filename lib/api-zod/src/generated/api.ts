@@ -1604,6 +1604,188 @@ export const TogglePodcastSubscriptionResponse = zod.object({
 });
 
 /**
+ * @summary Create a playlist
+ */
+export const CreatePlaylistBody = zod.object({
+  name: zod.string(),
+  description: zod.string().optional(),
+  isPublic: zod.boolean().optional(),
+  coverColor: zod.string().optional(),
+});
+
+/**
+ * @summary My playlists (Liked Songs first)
+ */
+export const GetPlaylistsResponse = zod.object({
+  items: zod.array(
+    zod.object({
+      id: zod.string(),
+      name: zod.string(),
+      description: zod.string(),
+      coverColor: zod.string().nullish(),
+      isPublic: zod.boolean(),
+      isLikedSongs: zod.boolean(),
+      owner: zod
+        .union([
+          zod.object({
+            id: zod.string(),
+            username: zod.string(),
+            name: zod.string(),
+            avatarUrl: zod.string().nullish(),
+          }),
+          zod.null(),
+        ])
+        .optional(),
+      trackCount: zod.number(),
+      createdAt: zod.string(),
+    }),
+  ),
+});
+
+/**
+ * @summary Playlist with tracks ("liked" = virtual Liked Songs)
+ */
+export const GetPlaylistParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetPlaylistResponse = zod
+  .object({
+    id: zod.string(),
+    name: zod.string(),
+    description: zod.string(),
+    coverColor: zod.string().nullish(),
+    isPublic: zod.boolean(),
+    isLikedSongs: zod.boolean(),
+    owner: zod
+      .union([
+        zod.object({
+          id: zod.string(),
+          username: zod.string(),
+          name: zod.string(),
+          avatarUrl: zod.string().nullish(),
+        }),
+        zod.null(),
+      ])
+      .optional(),
+    trackCount: zod.number(),
+    createdAt: zod.string(),
+  })
+  .and(
+    zod.object({
+      tracks: zod.array(
+        zod.object({
+          id: zod.string(),
+          title: zod.string(),
+          artist: zod.string(),
+          artistId: zod.string(),
+          genre: zod.string(),
+          duration: zod.string(),
+          durationSeconds: zod.number(),
+          coverColor: zod.string(),
+          audioUrl: zod.string().nullable(),
+          coverUrl: zod.string().nullable(),
+          playCount: zod.number(),
+          likes: zod.number(),
+          university: zod.string().nullable(),
+          audioUrls: zod.record(zod.string(), zod.string()).nullish(),
+          coverUrls: zod.record(zod.string(), zod.string()).nullish(),
+          stemUrls: zod.record(zod.string(), zod.string()).nullish(),
+          processingStatus: zod.enum(["pending", "processing", "ready", "failed"]).optional(),
+        }),
+      ),
+      entries: zod.array(
+        zod.object({
+          entryId: zod.string(),
+          trackId: zod.string(),
+          position: zod.number(),
+        }),
+      ),
+    }),
+  );
+
+/**
+ * @summary Edit a playlist (owner)
+ */
+export const UpdatePlaylistParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdatePlaylistBody = zod.object({
+  name: zod.string().optional(),
+  description: zod.string().optional(),
+  isPublic: zod.boolean().optional(),
+  coverColor: zod.string().optional(),
+});
+
+export const UpdatePlaylistResponse = zod.object({
+  id: zod.string(),
+  name: zod.string(),
+  description: zod.string(),
+  coverColor: zod.string().nullish(),
+  isPublic: zod.boolean(),
+  isLikedSongs: zod.boolean(),
+  owner: zod
+    .union([
+      zod.object({
+        id: zod.string(),
+        username: zod.string(),
+        name: zod.string(),
+        avatarUrl: zod.string().nullish(),
+      }),
+      zod.null(),
+    ])
+    .optional(),
+  trackCount: zod.number(),
+  createdAt: zod.string(),
+});
+
+/**
+ * @summary Delete a playlist (owner)
+ */
+export const DeletePlaylistParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+/**
+ * @summary Append a track to a playlist (owner)
+ */
+export const AddPlaylistTrackParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const AddPlaylistTrackBody = zod.object({
+  trackId: zod.string(),
+});
+
+/**
+ * @summary Remove a track from a playlist (owner)
+ */
+export const RemovePlaylistTrackParams = zod.object({
+  id: zod.coerce.string(),
+  trackId: zod.coerce.string(),
+});
+
+export const RemovePlaylistTrackResponse = zod.object({
+  ok: zod.boolean(),
+});
+
+/**
+ * @summary Reorder playlist tracks by entry id (owner)
+ */
+export const ReorderPlaylistTracksParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ReorderPlaylistTracksBody = zod.object({
+  entryIds: zod.array(zod.string()),
+});
+
+export const ReorderPlaylistTracksResponse = zod.object({
+  ok: zod.boolean(),
+});
+
+/**
  * @summary List all known universities
  */
 export const GetUniversitiesResponseItem = zod.string();
