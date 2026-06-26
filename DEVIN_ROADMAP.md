@@ -54,7 +54,7 @@ campus-music-app/
 
 ### 1.2 Database Schema (`lib/db/src/schema/`)
 
-All tables live in a dedicated `campus_music` Postgres schema. 17 tables total (after Phase 2 additions: `upload_jobs`, `play_history`, `track_skips`, and 6 AI foundation tables). The `artists` table was collapsed into `users` in Phase 0. Versioned SQL migrations checked into `lib/db/migrations/`; the post-merge hook runs `pnpm db:migrate`. `pgvector` extension enabled (Phase 2).
+All tables live in a dedicated `campus_music` Postgres schema. 22 tables total (after Phase 3 additions: `posts`, `comments`, `post_likes`, `comment_likes`, `post_shares`). The `artists` table was collapsed into `users` in Phase 0. Versioned SQL migrations checked into `lib/db/migrations/`; the post-merge hook runs `pnpm db:migrate`. `pgvector` extension enabled (Phase 2).
 
 | Table | Cols | Purpose | Notes |
 |---|---|---|---|
@@ -76,12 +76,17 @@ All tables live in a dedicated `campus_music` Postgres schema. 17 tables total (
 | `ai_jobs` | id (UUID PK), type, trackId (FK SET NULL), userId (FK SET NULL), status, input, output, errorMessage, attempts, timestamps | AI job queue | Added Phase 2 (schema only). Index on `(status, createdAt)`. |
 | `ai_generations` | id (UUID PK), userId (FK SET NULL), feature, model, input, output, cost, createdAt | AI provenance/lineage | Added Phase 2 (schema only). Index on `(userId, createdAt DESC)`. |
 | `ai_credit_ledger` | id (UUID PK), userId (FK CASCADE), amount, reason, generationId (FK SET NULL), createdAt | AI credit ledger | Added Phase 2 (schema only). Index on `(userId, createdAt DESC)`. |
+| `posts` | id (UUID PK), authorUserId (FK CASCADE), body, attachedTrackId (FK SET NULL), attachedImageUrl, type (original\|repost\|quote), originalPostId (FK SET NULL, self-ref), createdAt, updatedAt, deletedAt | Social posts | Added Phase 3. Soft-delete via `deletedAt`. Reposts/quotes are posts with `type` + `originalPostId`. Indexes on `(authorUserId, createdAt DESC)`, `(createdAt DESC)`, `(attachedTrackId)`, `(originalPostId)`. |
+| `comments` | id (UUID PK), targetType (post\|track), targetId, authorUserId (FK CASCADE), body, parentCommentId (FK CASCADE, self-ref), createdAt, deletedAt | Polymorphic comments | Added Phase 3. No DB FK on targetId (validated in app code). One level of nesting via `parentCommentId`. Soft-delete via `deletedAt`. Indexes on `(targetType, targetId, createdAt)`, `(authorUserId)`, `(parentCommentId)`. |
+| `post_likes` | id (UUID PK), postId (FK CASCADE), userId (FK CASCADE), createdAt | Post likes | Added Phase 3. UNIQUE(postId, userId). |
+| `comment_likes` | id (UUID PK), commentId (FK CASCADE), userId (FK CASCADE), createdAt | Comment likes | Added Phase 3. UNIQUE(commentId, userId). |
+| `post_shares` | id (UUID PK), postId (FK CASCADE), userId (FK CASCADE), platform, createdAt | Post shares | Added Phase 3. NO UNIQUE constraint (repeatable shares). Index on `(postId, createdAt DESC)`. |
 
 **What's missing from the schema for an MVP that ships every feature already shown in the UI:**
 
-- ❌ `posts` table (the home feed currently fabricates posts from artists + tracks in the mobile client).
-- ❌ `comments` table (music-feed uses a hardcoded comment pool per track).
-- ❌ `post_likes` / `post_shares` / `post_reposts` tables.
+- ✅ ~~`posts` table~~ — **Done (Phase 3).** `posts` table with `type` column (original/repost/quote), `originalPostId` FK for reposts + quotes, soft delete via `deletedAt`.
+- ✅ ~~`comments` table~~ — **Done (Phase 3).** Polymorphic `targetType + targetId` (post or track). One level of nesting via `parentCommentId`. Soft delete.
+- ✅ ~~`post_likes` / `comment_likes` / `post_shares`~~ — **Done (Phase 3).** `post_likes` + `comment_likes` with UNIQUE constraint (toggle). `post_shares` without UNIQUE (repeatable). Reposts are `posts` rows with `type='repost'` (not a separate table).
 - ❌ `notifications` table + `push_tokens` table.
 - ✅ ~~`play_history`~~ — **Done (Phase 2).** `play_history` table with full Spotify-class data shape (userId, trackId, playedAt, secondsListened, completed, source, context). `track_skips` table for negative signal. Trending rewritten to 7-day rolling window.
 - ❌ `conversations` / `messages` / `message_reads` tables (Messages screen is fully hardcoded).
@@ -118,8 +123,20 @@ The server is the most "real" part of the codebase. CORS is now allow-listed (Ph
 | `GET /me/history` | ✅ New (Phase 2) | `requireAuth`. Cursor-paginated listening history from `play_history`. |
 | `POST /tracks/:id/like` | ✅ | Real toggle into `user_likes` |
 | `POST /tracks/:id/library` | ✅ | Real toggle into `user_library` |
-| `GET /feed` | ⚠️ | **Just returns tracks ordered by `playCount`** — not a "social posts" feed |
-| `POST /feed/:id/like` | ❌ | **Computes a number and returns it but never writes anything** (see [`feed.ts:28-42`](artifacts/api-server/src/routes/feed.ts)) |
+| `GET /feed` | ✅ Done (Phase 3) | Rewritten: cursor-paginated posts from followed artists + accepted connections + self, with global fallback on sparse first page. Unauthenticated = recent global posts. Uses `shapePosts` batched helper. |
+| ~~`POST /feed/:id/like`~~ | ❌ Removed (Phase 0) | Was a no-op; superseded by `POST /posts/:id/like`. |
+| `POST /posts` | ✅ New (Phase 3) | `requireAuth` + `requireVerified`. Create original/quote/repost posts. Returns shaped post with author + engagement counts. |
+| `GET /posts/:id` | ✅ New (Phase 3) | `optionalAuth`. Single post with author, engagement counts, attached track (signed URLs), `hasLiked`/`hasReposted`. |
+| `DELETE /posts/:id` | ✅ New (Phase 3) | `requireAuth`. Ownership-checked. Soft delete (`deletedAt = now()`). |
+| `GET /users/:id/posts` | ✅ New (Phase 3) | `optionalAuth`. Cursor-paginated posts by a specific user. Same response shape as `/feed`. |
+| `POST /posts/:id/like` | ✅ New (Phase 3) | `requireAuth`. Toggle (insert/delete). Returns `{ liked, likeCount }`. UNIQUE constraint prevents duplicates. |
+| `POST /posts/:id/share` | ✅ New (Phase 3) | `requireAuth`. Records share with platform. Repeatable (no UNIQUE). Returns `{ shareCount, shareUrl }`. |
+| `POST /posts/:id/repost` | ✅ New (Phase 3) | `requireAuth`. Creates repost (post with `type='repost'`). 409 if already reposted. |
+| `DELETE /posts/:id/unrepost` | ✅ New (Phase 3) | `requireAuth`. Soft-deletes viewer's repost of the post. |
+| `POST /comments` | ✅ New (Phase 3) | `requireAuth` + `requireVerified`. Polymorphic (targetType: post/track). One-level nesting enforced. |
+| `GET /comments` | ✅ New (Phase 3) | `optionalAuth`. Cursor-paginated. Top-level comments with up to 3 eager replies. `?targetType=&targetId=`. |
+| `DELETE /comments/:id` | ✅ New (Phase 3) | `requireAuth`. Ownership-checked. Soft delete. |
+| `POST /comments/:id/like` | ✅ New (Phase 3) | `requireAuth`. Toggle. Returns `{ liked, likeCount }`. |
 | `GET /search?q=` | ⚠️ | Full table scan + JS `.includes()` — works but doesn't scale |
 | `GET /universities` / `/universities/search` | ⚠️ | Union of `WELL_KNOWN` constant + `SELECT … FROM tracks/artists` (full scan) |
 | `GET /artists` / `/artists/followed` / `/artists/:id` / `PATCH /artists/:id` / `POST /artists/:id/follow` | ✅ | Follower count is `COUNT(*) FROM artist_follows`. **Seeded** with `seed_f_xxx` user IDs that don't exist in `users` |
@@ -137,10 +154,10 @@ The server is the most "real" part of the codebase. CORS is now allow-listed (Ph
 
 - ✅ ~~No `requireAuth` middleware~~ — **Done (Phase 0).** `requireAuth`, `optionalAuth`, `requireAdmin` middleware extracted to `lib/jwt`. Inline auth checks replaced across all routes.
 - ✅ ~~No rate limiting~~ — **Done (Phase 0).** Per-route `express-rate-limit` on auth endpoints (login, register, OTP). Per-route mounting (not router-level) to avoid firing on unrelated routes.
-- ❌ No input validation framework — most routes do ad-hoc `typeof x === "string"` checks instead of using `@workspace/api-zod`. (Profile update enhanced with bio/genre/coverColor in Phase 2.)
+- ❌ No input validation framework — most routes do ad-hoc `typeof x === "string"` checks instead of using `@workspace/api-zod`. (Profile update enhanced with bio/genre/coverColor in Phase 2. Social endpoints use inline validation.)
 - ✅ ~~No central error handler~~ — **Done (Phase 0).** Central error handler + consistent `{code, message}` shape.
 - ❌ No request ID surfacing to clients.
-- ✅ ~~No tests~~ — **Done (Phase 0).** JWT unit tests, auth middleware tests, auth integration tests (register→login→me→401). Vitest harness + healthz smoke test.
+- ✅ ~~No tests~~ — **Done (Phase 0).** JWT unit tests, auth middleware tests, auth integration tests (register→login→me→401). Vitest harness + healthz smoke test. Phase 3 added social + mentions tests.
 - ✅ ~~No CI~~ — **Done (Phase 0).** GitHub Actions: lint → typecheck → build → test (with Postgres 16 service).
 - ✅ ~~CORS accepts all origins~~ — **Done (Phase 0).** CORS allow-listed.
 - ⚠️ `JWT_SECRET` falls back to a hardcoded dev string when unset in non-production.
@@ -156,7 +173,7 @@ The entry point (`app/index.tsx`) now checks for a stored token and redirects un
 
 | Screen | Status | What it does / where it cheats |
 |---|---|---|
-| `(tabs)/index.tsx` (Home) | ⚠️ | Pulls real `tracks` + `artists` via React-Query → **fabricates "posts" client-side**: post body, time, category, likes, comments, reposts, shares, saves are all calculated from `followerCount` mod constants. `LIVE_ARTISTS` is hardcoded seed. |
+| `(tabs)/index.tsx` (Home) | ✅ Done (Phase 3) | Rewritten to fetch from `GET /feed` (cursor-paginated). Renders real `PostCard` components with real engagement counts (like/comment/repost/share). Pull-to-refresh + infinite scroll + compose FAB. `LIVE_ARTISTS` strip kept hardcoded (Phase 5 replaces). |
 | `(tabs)/discover.tsx` | ⚠️ | Real `/search` integration. `NOW_LISTENING_USERS`, `CAMPUS_PODCASTS`, `TRENDING_COUNTRIES` are hardcoded constants. |
 | `(tabs)/library.tsx` | ✅ | Real `getLikedTrackIds` + `getLibraryTrackIds`. |
 | `(tabs)/connect.tsx` | ✅ | Real `getConnections`, `searchConnections`, send/respond mutations. |
@@ -167,9 +184,9 @@ The entry point (`app/index.tsx`) now checks for a stored token and redirects un
 | `(tabs)/real-connections.tsx` | ✅ | Variant on connect.tsx — real API. |
 | `live.tsx` | ❌ | **Completely mocked.** Seed chat + `AUTO_MSGS` rotated every 3.2 s. Viewer count `+= Math.random()*4`. No backend at all. |
 | `messages.tsx` | ❌ | **Completely hardcoded conversations.** No backend, no DB table, no API. |
-| `music-feed.tsx` | ⚠️ | Real tracks. **Per-track comment pools are hardcoded**; `submitComment` mutates local state only. |
+| `music-feed.tsx` | ✅ Done (Phase 3) | Real tracks + real comments via `GET /comments?targetType=track&targetId=xxx`. Submit, like, delete comments via real API. One-level replies. |
 | `player.tsx` | ✅ | Real `PlayerContext`; cross-device resume via `/playback`. |
-| `profile/[id].tsx` | ✅ | Real `/users/:id`. |
+| `profile/[id].tsx` | ✅ Done (Phase 3) | Real `/users/:id` + Posts section via `GET /users/:id/posts` rendered with `PostCard`. |
 | `artist/[id].tsx` | ✅ | Real `/artists/:id` + tracks. |
 | `genres.tsx` / `campuses.tsx` | ✅ | Real `/tracks?genre=` / `?university=`. |
 | `most-liked.tsx` | ✅ | Real `/tracks/most-liked`. |
@@ -306,30 +323,30 @@ Today the home feed in `(tabs)/index.tsx` fabricates posts from artists + tracks
 
 | Item | Status | Effort | Priority | Depends on |
 |---|---|---|---|---|
-| **`posts` table** (id, authorUserId, body, attachedTrackId?, attachedImageUrl?, createdAt, deletedAt) | ❌ | S | P0 | – |
-| **`POST /posts` / `GET /posts/:id` / `DELETE /posts/:id`** | ❌ | S | P0 | – |
-| **`GET /feed`** — chronological feed of posts from followed artists + connections, fall back to global popular | ⚠️ | M | P0 | Replace current feed.ts that just returns tracks |
-| **Mobile: rebuild Home tab** to render real posts | ⚠️ | M | P0 | – |
-| **Compose post screen** (text + attach track + attach image) | ❌ | M | P0 | – |
-| **Pagination** (cursor-based) | ❌ | S | P0 | – |
-| **Image attachments on posts** | ❌ | M | P1 | Storage replacement (§3.3) |
-| **Mentions + hashtags** in post body (parse + clickable) | ❌ | M | P1 | – |
+| ~~**`posts` table**~~ | ✅ Done (Phase 3) | – | P0 | `posts` table with `type` column (original/repost/quote), `originalPostId` FK, soft delete via `deletedAt`. |
+| ~~**`POST /posts` / `GET /posts/:id` / `DELETE /posts/:id`**~~ | ✅ Done (Phase 3) | – | P0 | Full CRUD with `requireAuth` + `requireVerified`. Ownership-checked soft delete. |
+| ~~**`GET /feed`**~~ | ✅ Done (Phase 3) | – | P0 | Rewritten: cursor-paginated posts from followed artists + connections + self, global fallback on sparse page. |
+| ~~**Mobile: rebuild Home tab**~~ | ✅ Done (Phase 3) | – | P0 | `PostCard` components with real engagement. Pull-to-refresh + infinite scroll + compose FAB. |
+| ~~**Compose post screen**~~ | ✅ Done (Phase 3) | – | P0 | `compose-post.tsx` — text input, quote-post support. Track/image attach toolbar visual-only (deferred). |
+| ~~**Pagination**~~ (cursor-based) | ✅ Done (Phase 3) | – | P0 | Cursor = `createdAt` ISO timestamp. `{ items, nextCursor }` response shape. |
+| **Image attachments on posts** | ⚠️ | M | P1 | `attachedImageUrl` column exists; upload UX deferred. |
+| ~~**Mentions + hashtags**~~ in post body (parse + clickable) | ✅ Done (Phase 3) | – | P1 | `extractMentions` / `extractHashtags` at write time. `RichText` component linkifies on mobile. |
 
 ### 2.6 Comments, Likes, Shares, Reposts
 
 | Item | Status | Effort | Priority | Depends on |
 |---|---|---|---|---|
-| **`comments` table** (id, targetType, targetId, authorUserId, body, parentCommentId?, createdAt) — polymorphic across `post` and `track` | ❌ | S | P0 | – |
-| `POST /:targetType/:id/comments` / `GET /:targetType/:id/comments` / `DELETE /comments/:id` | ❌ | S | P0 | – |
-| **Comments on tracks** (currently fully mocked in `music-feed.tsx`) | ❌ | S | P0 | – |
-| **Comments on posts** | ❌ | S | P0 | – |
-| **Nested replies (one level deep)** | ❌ | S | P1 | – |
-| **`post_likes` table** + endpoints | ❌ | S | P0 | – |
-| **Wire real post-like + comment-like into mobile** (today they're local-state) | ⚠️ | S | P0 | – |
-| **Delete broken `POST /feed/:id/like`** (currently no-op; superseded by post-likes) | ❌ | S | P0 | – |
-| **`post_shares` table** + outbound share-sheet w/ deep link (mobile uses `expo-sharing`) | ❌ | M | P0 | deep links |
-| **`post_reposts` table** — boost a post into followers' feeds (TikTok-style "repost") | ❌ | M | P0 | The current home feed UI already shows a "Reposts" counter — make it real |
-| **Quote-post** (compose new post that embeds another post) | ❌ | M | P1 | – |
+| ~~**`comments` table**~~ (polymorphic) | ✅ Done (Phase 3) | – | P0 | `targetType` (post/track) + `targetId`. No DB FK (validated in app). One-level nesting via `parentCommentId`. Soft delete. |
+| ~~**Comment endpoints**~~ | ✅ Done (Phase 3) | – | P0 | `POST /comments`, `GET /comments?targetType=&targetId=`, `DELETE /comments/:id`. Eager replies (max 3). |
+| ~~**Comments on tracks**~~ | ✅ Done (Phase 3) | – | P0 | `music-feed.tsx` rewritten to use `GET /comments?targetType=track`. |
+| ~~**Comments on posts**~~ | ✅ Done (Phase 3) | – | P0 | Post detail screen (`post/[id].tsx`) with full comment thread. |
+| ~~**Nested replies (one level deep)**~~ | ✅ Done (Phase 3) | – | P1 | Enforced: if `parentCommentId` is set, parent must be top-level. |
+| ~~**`post_likes` table** + endpoints~~ | ✅ Done (Phase 3) | – | P0 | `post_likes` + `comment_likes` with UNIQUE constraint. Toggle endpoints return `{ liked, likeCount }`. |
+| ~~**Wire real post-like + comment-like into mobile**~~ | ✅ Done (Phase 3) | – | P0 | `PostCard` engagement bar + per-comment like toggle with optimistic state. |
+| ~~**Delete broken `POST /feed/:id/like`**~~ | ✅ Done (Phase 0) | – | P0 | Removed in Phase 0 (commit 8cb7ee0). Superseded by `POST /posts/:id/like`. |
+| ~~**`post_shares` table**~~ | ✅ Done (Phase 3) | – | P0 | Repeatable shares (no UNIQUE). `POST /posts/:id/share` returns `{ shareCount, shareUrl }`. |
+| ~~**Reposts**~~ | ✅ Done (Phase 3) | – | P0 | Reposts are `posts` rows with `type='repost'` + `originalPostId` (not a separate table). 409 on duplicate. Unrepost via soft delete. |
+| ~~**Quote-post**~~ | ✅ Done (Phase 3) | – | P1 | Posts with `type='quote'` + `originalPostId`. Compose screen accepts `?quotePostId=`. |
 
 ### 2.7 Notifications
 
@@ -724,19 +741,24 @@ Live audio and Campus Music TV are different products and need different transpo
 
 **Effort:** ~12 dev-days. **New env vars:** `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_ENDPOINT`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_URL`, `AUDIO_CDN_URL` (optional), `IMAGE_CDN_URL` (optional). None required for dev/CI (MemoryStorageAdapter fallback).
 
-### Phase 3 — Music Feed + Comments + Likes + Shares + Reposts (2 weeks)
+### Phase 3 — Music Feed + Comments + Likes + Shares + Reposts (2 weeks) — COMPLETE
 
-- `posts`, `comments`, `post_likes`, `post_shares`, `post_reposts` tables.
-- `POST /posts`, cursor-paginated `GET /feed`, comment + like + share + repost endpoints.
-- Compose-post screen on mobile (text + track attach + image attach).
-- Rewrite Home tab to render real posts with real engagement counts.
-- Track comments wired to real `comments` table (replace `music-feed.tsx` mock).
-- Quote-post compose flow.
-- Mentions + hashtags parsed and clickable.
-- Fix the broken `POST /feed/:id/like` endpoint (delete; superseded).
-- Deep-link share URLs (`/post/:id`, `/track/:id`, `/u/:username`).
+> **Merged:** PR #12 (12 commits, `feature/phase-3-social-feed → main`). CI green.
 
-**Effort:** ~10 dev-days.
+- ✅ 5 new tables: `posts` (with `type` column for original/repost/quote + `originalPostId` FK + soft delete), `comments` (polymorphic `targetType + targetId`, one-level nesting), `post_likes` + `comment_likes` (UNIQUE constraint), `post_shares` (repeatable, no UNIQUE).
+- ✅ Posts CRUD: `POST /posts` (requireAuth + requireVerified), `GET /posts/:id` (optionalAuth), `DELETE /posts/:id` (ownership-checked soft delete), `GET /users/:id/posts` (cursor-paginated).
+- ✅ Feed rewrite: `GET /feed` cursor-paginated with follows + connections + self + global fallback. Batched `shapePosts` helper (no N+1): author, signed tracks, engagement counts, `hasLiked`/`hasReposted`, embedded `originalPost`.
+- ✅ Comments: `POST /comments`, `GET /comments?targetType=&targetId=` (eager replies max 3), `DELETE /comments/:id`. Batched `shapeComments` helper.
+- ✅ Likes: `POST /posts/:id/like` + `POST /comments/:id/like` toggle endpoints. UNIQUE constraint prevents duplicates.
+- ✅ Shares: `POST /posts/:id/share` (repeatable). Reposts: `POST /posts/:id/repost` (409 on duplicate) + `DELETE /posts/:id/unrepost` (soft delete).
+- ✅ Mentions + hashtags: `extractMentions`/`extractHashtags` utility. `RichText` component linkifies @mentions → profile, #hashtags → search.
+- ✅ Mobile: Home tab rewrite (real `GET /feed` + `PostCard` + pull-to-refresh + infinite scroll + compose FAB). Compose post screen (text + quote support). Post detail screen (comments + replies + inline composer). Profile posts section. Track comments rewrite (`music-feed.tsx` wired to real API).
+- ✅ Migration: `0008_social_posts.sql` — all 5 tables + indexes.
+- ✅ OpenAPI spec + generated client updated (13 new operations).
+- ✅ Tests: INTEGRATION-gated full-surface social tests (post lifecycle, comments, likes, shares, reposts, empty-post rejection, cross-user delete rejection) + DB-free mention/hashtag unit tests.
+
+**Effort:** ~10 dev-days. **No new env vars.**
+
 
 ### Phase 4 — WebSocket Gateway + Direct Messages (2 weeks)
 
@@ -924,7 +946,7 @@ Four core artist-side AI tools, all behind the `ai_credits` ledger.
 | 0 | Foundations | 1 week | **COMPLETE** |
 | 1 | Real Auth | 1 week | **COMPLETE** |
 | 2 | Profiles + Storage + Audio Pipeline + **AI Foundations** (R2 + CDN + transcoder + embeddings + stems + lyrics) | 2.5 weeks | **COMPLETE** |
-| 3 | Music Feed + Social Graph (comments/likes/shares/reposts) | 2 weeks |
+| 3 | Music Feed + Social Graph (comments/likes/shares/reposts) | 2 weeks | **COMPLETE** |
 | 4 | WebSocket Gateway + Direct Messages | 2 weeks |
 | 5 | Live Now (real audio + chat + live→track publish) | 2.5 weeks |
 | 6 | Notifications (in-app + push) | 1.5 weeks |
@@ -1032,4 +1054,4 @@ Things I deliberately did **not** put in the MVP because they require real user 
 
 ---
 
-*Phases 0–2 shipped. Continuing one phase at a time, with a PR per phase. Soft-launch target: ~12 calendar weeks from kickoff (2 engineers, parallel where possible).*
+*Phases 0–3 shipped. Continuing one phase at a time, with a PR per phase. Soft-launch target: ~12 calendar weeks from kickoff (2 engineers, parallel where possible).*
