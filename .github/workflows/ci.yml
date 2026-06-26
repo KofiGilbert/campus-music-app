@@ -74,11 +74,11 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Create schema in the throwaway CI database
-        # Interim: drizzle-kit push materializes the schema from schema/*.ts.
-        # The migrations-infra commit replaces this with `pnpm db:migrate`
-        # (applies the versioned SQL). Non-interactive on a fresh DB (no
-        # data-loss statements to confirm).
-        run: pnpm --filter @workspace/db run push
+      - name: Apply migrations to the throwaway CI database
+        # Fresh DB: drizzle-orm migrate runs the 0000_init baseline (full
+        # from-scratch schema) and any later migrations from the versioned SQL.
+        # No bootstrap here — bootstrapping (marking 0000_init already-applied)
+        # is only for the existing prod DB (see lib/db/README.md).
+        run: pnpm db:migrate
       - name: Run tests
         run: pnpm --filter @workspace/api-server run test
