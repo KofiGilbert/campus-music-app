@@ -1841,6 +1841,181 @@ paths:
               schema:
                 $ref: "#/components/schemas/SubscribeResponse"
 
+  /playlists:
+    post:
+      operationId: createPlaylist
+      tags: [playlists]
+      summary: Create a playlist
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePlaylistBody"
+      responses:
+        "201":
+          description: Playlist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Playlist"
+    get:
+      operationId: getPlaylists
+      tags: [playlists]
+      summary: My playlists (Liked Songs first)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Playlists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaylistsResponse"
+
+  /playlists/{id}:
+    get:
+      operationId: getPlaylist
+      tags: [playlists]
+      summary: Playlist with tracks ("liked" = virtual Liked Songs)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Playlist detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaylistDetail"
+    patch:
+      operationId: updatePlaylist
+      tags: [playlists]
+      summary: Edit a playlist (owner)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePlaylistBody"
+      responses:
+        "200":
+          description: Updated playlist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Playlist"
+    delete:
+      operationId: deletePlaylist
+      tags: [playlists]
+      summary: Delete a playlist (owner)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "204":
+          description: Deleted
+
+  /playlists/{id}/tracks:
+    post:
+      operationId: addPlaylistTrack
+      tags: [playlists]
+      summary: Append a track to a playlist (owner)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddPlaylistTrackBody"
+      responses:
+        "201":
+          description: Added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AddPlaylistTrackResponse"
+
+  /playlists/{id}/tracks/{trackId}:
+    delete:
+      operationId: removePlaylistTrack
+      tags: [playlists]
+      summary: Remove a track from a playlist (owner)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+        - in: path
+          name: trackId
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+
+  /playlists/{id}/tracks/order:
+    put:
+      operationId: reorderPlaylistTracks
+      tags: [playlists]
+      summary: Reorder playlist tracks by entry id (owner)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReorderPlaylistBody"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+
   /universities:
     get:
       operationId: getUniversities
@@ -3386,6 +3561,150 @@ components:
       required:
         - subscribed
         - subscriberCount
+
+    PlaylistOwner:
+      type: object
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        name:
+          type: string
+        avatarUrl:
+          type: ["string", "null"]
+      required:
+        - id
+        - username
+        - name
+
+    Playlist:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        coverColor:
+          type: ["string", "null"]
+        isPublic:
+          type: boolean
+        isLikedSongs:
+          type: boolean
+        owner:
+          oneOf:
+            - $ref: "#/components/schemas/PlaylistOwner"
+            - type: "null"
+        trackCount:
+          type: integer
+        createdAt:
+          type: string
+      required:
+        - id
+        - name
+        - description
+        - isPublic
+        - isLikedSongs
+        - trackCount
+        - createdAt
+
+    PlaylistsResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Playlist"
+      required:
+        - items
+
+    PlaylistEntry:
+      type: object
+      properties:
+        entryId:
+          type: string
+        trackId:
+          type: string
+        position:
+          type: integer
+      required:
+        - entryId
+        - trackId
+        - position
+
+    PlaylistDetail:
+      allOf:
+        - $ref: "#/components/schemas/Playlist"
+        - type: object
+          properties:
+            tracks:
+              type: array
+              items:
+                $ref: "#/components/schemas/Track"
+            entries:
+              type: array
+              items:
+                $ref: "#/components/schemas/PlaylistEntry"
+          required:
+            - tracks
+            - entries
+
+    CreatePlaylistBody:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        isPublic:
+          type: boolean
+        coverColor:
+          type: string
+      required:
+        - name
+
+    UpdatePlaylistBody:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        isPublic:
+          type: boolean
+        coverColor:
+          type: string
+
+    AddPlaylistTrackBody:
+      type: object
+      properties:
+        trackId:
+          type: string
+      required:
+        - trackId
+
+    AddPlaylistTrackResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        trackCount:
+          type: integer
+      required:
+        - ok
+        - trackCount
+
+    ReorderPlaylistBody:
+      type: object
+      properties:
+        entryIds:
+          type: array
+          items:
+            type: string
+      required:
+        - entryIds
 
     PublicProfile:
       type: object

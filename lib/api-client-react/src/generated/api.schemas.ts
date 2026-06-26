@@ -615,6 +615,69 @@ export interface SubscribeResponse {
   subscriberCount: number;
 }
 
+export interface PlaylistOwner {
+  id: string;
+  username: string;
+  name: string;
+  /** @nullable */
+  avatarUrl?: string | null;
+}
+
+export interface Playlist {
+  id: string;
+  name: string;
+  description: string;
+  /** @nullable */
+  coverColor?: string | null;
+  isPublic: boolean;
+  isLikedSongs: boolean;
+  owner?: PlaylistOwner | null;
+  trackCount: number;
+  createdAt: string;
+}
+
+export interface PlaylistsResponse {
+  items: Playlist[];
+}
+
+export interface PlaylistEntry {
+  entryId: string;
+  trackId: string;
+  position: number;
+}
+
+export type PlaylistDetail = Playlist & {
+  tracks: Track[];
+  entries: PlaylistEntry[];
+};
+
+export interface CreatePlaylistBody {
+  name: string;
+  description?: string;
+  isPublic?: boolean;
+  coverColor?: string;
+}
+
+export interface UpdatePlaylistBody {
+  name?: string;
+  description?: string;
+  isPublic?: boolean;
+  coverColor?: string;
+}
+
+export interface AddPlaylistTrackBody {
+  trackId: string;
+}
+
+export interface AddPlaylistTrackResponse {
+  ok: boolean;
+  trackCount: number;
+}
+
+export interface ReorderPlaylistBody {
+  entryIds: string[];
+}
+
 export type PublicProfileRole = (typeof PublicProfileRole)[keyof typeof PublicProfileRole];
 
 export const PublicProfileRole = {
