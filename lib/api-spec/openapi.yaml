@@ -694,13 +694,19 @@ paths:
     post:
       operationId: recordPlay
       tags: [tracks]
-      summary: Increment the play count for a track
+      summary: Record a play (per-listen telemetry + play count)
       parameters:
         - in: path
           name: id
           schema:
             type: string
           required: true
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlayBody"
       responses:
         "200":
           description: Updated play count
@@ -714,6 +720,80 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  /tracks/{id}/skip:
+    post:
+      operationId: recordSkip
+      tags: [tracks]
+      summary: Record a track skip
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SkipBody"
+      responses:
+        "200":
+          description: Recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SkipResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /me/history:
+    get:
+      operationId: getListeningHistory
+      tags: [tracks]
+      summary: Cursor-paginated listening history
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: cursor
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Listening history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HistoryResponse"
+
+  /artists/{id}/followers:
+    get:
+      operationId: getFollowers
+      tags: [artists]
+      summary: Cursor-paginated followers list
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+        - in: query
+          name: cursor
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Followers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FollowersResponse"
 
   /tracks/{id}/library:
     post:
@@ -1345,6 +1425,10 @@ components:
         avatarUrl:
           type: string
           nullable: true
+        avatarUrls:
+          type: ["object", "null"]
+          additionalProperties:
+            type: string
         emailVerified:
           type: boolean
       required:
@@ -1442,6 +1526,21 @@ components:
           type: integer
         university:
           type: ["string", "null"]
+        audioUrls:
+          type: ["object", "null"]
+          additionalProperties:
+            type: string
+        coverUrls:
+          type: ["object", "null"]
+          additionalProperties:
+            type: string
+        stemUrls:
+          type: ["object", "null"]
+          additionalProperties:
+            type: string
+        processingStatus:
+          type: string
+          enum: [pending, processing, ready, failed]
       required:
         - id
         - title
@@ -1703,6 +1802,96 @@ components:
       required:
         - trackId
         - playCount
+
+    PlayBody:
+      type: object
+      properties:
+        secondsListened:
+          type: integer
+        completed:
+          type: boolean
+        source:
+          type: string
+        context:
+          type: ["string", "null"]
+
+    SkipBody:
+      type: object
+      properties:
+        secondsBeforeSkip:
+          type: integer
+        source:
+          type: string
+
+    SkipResponse:
+      type: object
+      properties:
+        trackId:
+          type: string
+        recorded:
+          type: boolean
+      required:
+        - trackId
+        - recorded
+
+    HistoryEntry:
+      type: object
+      properties:
+        track:
+          $ref: "#/components/schemas/Track"
+        playedAt:
+          type: string
+        secondsListened:
+          type: integer
+        completed:
+          type: boolean
+      required:
+        - track
+        - playedAt
+        - secondsListened
+        - completed
+
+    HistoryResponse:
+      type: object
+      properties:
+        history:
+          type: array
+          items:
+            $ref: "#/components/schemas/HistoryEntry"
+        nextCursor:
+          type: ["string", "null"]
+      required:
+        - history
+        - nextCursor
+
+    FollowerSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        name:
+          type: string
+        avatarUrl:
+          type: ["string", "null"]
+      required:
+        - id
+        - username
+        - name
+
+    FollowersResponse:
+      type: object
+      properties:
+        followers:
+          type: array
+          items:
+            $ref: "#/components/schemas/FollowerSummary"
+        nextCursor:
+          type: ["string", "null"]
+      required:
+        - followers
+        - nextCursor
 
     CreateTrackBody:
       type: object

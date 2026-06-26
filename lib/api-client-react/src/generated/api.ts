@@ -26,14 +26,18 @@ import type {
   ErrorResponse,
   FollowBody,
   FollowResponse,
+  FollowersResponse,
   ForgotPasswordBody,
   ForgotPasswordResponse,
   GetConnectionsParams,
   GetFeedParams,
+  GetFollowersParams,
+  GetListeningHistoryParams,
   GetMostLikedTracksParams,
   GetTracksParams,
   GetTrendingTracksParams,
   HealthStatus,
+  HistoryResponse,
   LibraryBody,
   LibraryResponse,
   LikeBody,
@@ -44,6 +48,7 @@ import type {
   OtpSendResponse,
   OtpVerifyBody,
   OtpVerifyResponse,
+  PlayBody,
   PlayResponse,
   PlaybackState,
   PlaybackStateBody,
@@ -59,6 +64,8 @@ import type {
   SearchParams,
   SearchResults,
   SearchUniversitiesParams,
+  SkipBody,
+  SkipResponse,
   Track,
   UpdateArtistBody,
   UpdateProfileBody,
@@ -1886,16 +1893,22 @@ export const useLikeTrack = <TError = ErrorType<ErrorResponse>, TContext = unkno
 };
 
 /**
- * @summary Increment the play count for a track
+ * @summary Record a play (per-listen telemetry + play count)
  */
 export const getRecordPlayUrl = (id: string) => {
   return `/api/tracks/${id}/play`;
 };
 
-export const recordPlay = async (id: string, options?: RequestInit): Promise<PlayResponse> => {
+export const recordPlay = async (
+  id: string,
+  playBody?: PlayBody,
+  options?: RequestInit,
+): Promise<PlayResponse> => {
   return customFetch<PlayResponse>(getRecordPlayUrl(id), {
     ...options,
     method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(playBody),
   });
 };
 
@@ -1906,14 +1919,14 @@ export const getRecordPlayMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof recordPlay>>,
     TError,
-    { id: string },
+    { id: string; data: BodyType<PlayBody> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof recordPlay>>,
   TError,
-  { id: string },
+  { id: string; data: BodyType<PlayBody> },
   TContext
 > => {
   const mutationKey = ["recordPlay"];
@@ -1923,35 +1936,286 @@ export const getRecordPlayMutationOptions = <
       : { ...options, mutation: { ...options.mutation, mutationKey } }
     : { mutation: { mutationKey }, request: undefined };
 
-  const mutationFn: MutationFunction<Awaited<ReturnType<typeof recordPlay>>, { id: string }> = (
-    props,
-  ) => {
-    const { id } = props ?? {};
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof recordPlay>>,
+    { id: string; data: BodyType<PlayBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
 
-    return recordPlay(id, requestOptions);
+    return recordPlay(id, data, requestOptions);
   };
 
   return { mutationFn, ...mutationOptions };
 };
 
 export type RecordPlayMutationResult = NonNullable<Awaited<ReturnType<typeof recordPlay>>>;
-
+export type RecordPlayMutationBody = BodyType<PlayBody>;
 export type RecordPlayMutationError = ErrorType<ErrorResponse>;
 
 /**
- * @summary Increment the play count for a track
+ * @summary Record a play (per-listen telemetry + play count)
  */
 export const useRecordPlay = <TError = ErrorType<ErrorResponse>, TContext = unknown>(options?: {
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof recordPlay>>,
     TError,
-    { id: string },
+    { id: string; data: BodyType<PlayBody> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
-}): UseMutationResult<Awaited<ReturnType<typeof recordPlay>>, TError, { id: string }, TContext> => {
+}): UseMutationResult<
+  Awaited<ReturnType<typeof recordPlay>>,
+  TError,
+  { id: string; data: BodyType<PlayBody> },
+  TContext
+> => {
   return useMutation(getRecordPlayMutationOptions(options));
 };
+
+/**
+ * @summary Record a track skip
+ */
+export const getRecordSkipUrl = (id: string) => {
+  return `/api/tracks/${id}/skip`;
+};
+
+export const recordSkip = async (
+  id: string,
+  skipBody?: SkipBody,
+  options?: RequestInit,
+): Promise<SkipResponse> => {
+  return customFetch<SkipResponse>(getRecordSkipUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(skipBody),
+  });
+};
+
+export const getRecordSkipMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof recordSkip>>,
+    TError,
+    { id: string; data: BodyType<SkipBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof recordSkip>>,
+  TError,
+  { id: string; data: BodyType<SkipBody> },
+  TContext
+> => {
+  const mutationKey = ["recordSkip"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof recordSkip>>,
+    { id: string; data: BodyType<SkipBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return recordSkip(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RecordSkipMutationResult = NonNullable<Awaited<ReturnType<typeof recordSkip>>>;
+export type RecordSkipMutationBody = BodyType<SkipBody>;
+export type RecordSkipMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Record a track skip
+ */
+export const useRecordSkip = <TError = ErrorType<ErrorResponse>, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof recordSkip>>,
+    TError,
+    { id: string; data: BodyType<SkipBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof recordSkip>>,
+  TError,
+  { id: string; data: BodyType<SkipBody> },
+  TContext
+> => {
+  return useMutation(getRecordSkipMutationOptions(options));
+};
+
+/**
+ * @summary Cursor-paginated listening history
+ */
+export const getGetListeningHistoryUrl = (params?: GetListeningHistoryParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/me/history?${stringifiedParams}` : `/api/me/history`;
+};
+
+export const getListeningHistory = async (
+  params?: GetListeningHistoryParams,
+  options?: RequestInit,
+): Promise<HistoryResponse> => {
+  return customFetch<HistoryResponse>(getGetListeningHistoryUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetListeningHistoryQueryKey = (params?: GetListeningHistoryParams) => {
+  return [`/api/me/history`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetListeningHistoryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getListeningHistory>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetListeningHistoryParams,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getListeningHistory>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetListeningHistoryQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getListeningHistory>>> = ({ signal }) =>
+    getListeningHistory(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getListeningHistory>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetListeningHistoryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getListeningHistory>>
+>;
+export type GetListeningHistoryQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Cursor-paginated listening history
+ */
+
+export function useGetListeningHistory<
+  TData = Awaited<ReturnType<typeof getListeningHistory>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetListeningHistoryParams,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getListeningHistory>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetListeningHistoryQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Cursor-paginated followers list
+ */
+export const getGetFollowersUrl = (id: string, params?: GetFollowersParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/artists/${id}/followers?${stringifiedParams}`
+    : `/api/artists/${id}/followers`;
+};
+
+export const getFollowers = async (
+  id: string,
+  params?: GetFollowersParams,
+  options?: RequestInit,
+): Promise<FollowersResponse> => {
+  return customFetch<FollowersResponse>(getGetFollowersUrl(id, params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetFollowersQueryKey = (id: string, params?: GetFollowersParams) => {
+  return [`/api/artists/${id}/followers`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetFollowersQueryOptions = <
+  TData = Awaited<ReturnType<typeof getFollowers>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  params?: GetFollowersParams,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getFollowers>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetFollowersQueryKey(id, params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getFollowers>>> = ({ signal }) =>
+    getFollowers(id, params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, enabled: !!id, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getFollowers>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetFollowersQueryResult = NonNullable<Awaited<ReturnType<typeof getFollowers>>>;
+export type GetFollowersQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Cursor-paginated followers list
+ */
+
+export function useGetFollowers<
+  TData = Awaited<ReturnType<typeof getFollowers>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  params?: GetFollowersParams,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getFollowers>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetFollowersQueryOptions(id, params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Save or unsave a track from the library

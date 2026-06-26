@@ -37,6 +37,11 @@ export const UserProfileRole = {
   artist: "artist",
 } as const;
 
+/**
+ * @nullable
+ */
+export type UserProfileAvatarUrls = { [key: string]: string } | null;
+
 export interface UserProfile {
   id: string;
   email: string;
@@ -45,6 +50,8 @@ export interface UserProfile {
   university: string;
   country: string;
   avatarUrl?: string | null;
+  /** @nullable */
+  avatarUrls?: UserProfileAvatarUrls;
   emailVerified: boolean;
 }
 
@@ -117,6 +124,31 @@ export interface FollowResponse {
   following: boolean;
 }
 
+/**
+ * @nullable
+ */
+export type TrackAudioUrls = { [key: string]: string } | null;
+
+/**
+ * @nullable
+ */
+export type TrackCoverUrls = { [key: string]: string } | null;
+
+/**
+ * @nullable
+ */
+export type TrackStemUrls = { [key: string]: string } | null;
+
+export type TrackProcessingStatus =
+  (typeof TrackProcessingStatus)[keyof typeof TrackProcessingStatus];
+
+export const TrackProcessingStatus = {
+  pending: "pending",
+  processing: "processing",
+  ready: "ready",
+  failed: "failed",
+} as const;
+
 export interface Track {
   id: string;
   title: string;
@@ -134,6 +166,13 @@ export interface Track {
   likes: number;
   /** @nullable */
   university: string | null;
+  /** @nullable */
+  audioUrls?: TrackAudioUrls;
+  /** @nullable */
+  coverUrls?: TrackCoverUrls;
+  /** @nullable */
+  stemUrls?: TrackStemUrls;
+  processingStatus?: TrackProcessingStatus;
 }
 
 export interface Artist {
@@ -285,6 +324,51 @@ export interface PlayResponse {
   playCount: number;
 }
 
+export interface PlayBody {
+  secondsListened?: number;
+  completed?: boolean;
+  source?: string;
+  /** @nullable */
+  context?: string | null;
+}
+
+export interface SkipBody {
+  secondsBeforeSkip?: number;
+  source?: string;
+}
+
+export interface SkipResponse {
+  trackId: string;
+  recorded: boolean;
+}
+
+export interface HistoryEntry {
+  track: Track;
+  playedAt: string;
+  secondsListened: number;
+  completed: boolean;
+}
+
+export interface HistoryResponse {
+  history: HistoryEntry[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
+export interface FollowerSummary {
+  id: string;
+  username: string;
+  name: string;
+  /** @nullable */
+  avatarUrl?: string | null;
+}
+
+export interface FollowersResponse {
+  followers: FollowerSummary[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
 export interface CreateTrackBody {
   title: string;
   genre: string;
@@ -347,6 +431,14 @@ export type GetMostLikedTracksParams = {
    * Max number of results (default 50)
    */
   limit?: number;
+};
+
+export type GetListeningHistoryParams = {
+  cursor?: string;
+};
+
+export type GetFollowersParams = {
+  cursor?: string;
 };
 
 export type GetFeedParams = {
