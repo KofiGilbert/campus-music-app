@@ -18,6 +18,7 @@ import messagesRouter from "./messages";
 import liveRouter from "./live";
 import notificationsRouter from "./notifications";
 import discoveryRouter from "./discovery";
+import podcastsRouter from "./podcasts";
 
 const router: IRouter = Router();
 
@@ -39,6 +40,7 @@ router.use(messagesRouter);
 router.use(liveRouter);
 router.use(notificationsRouter);
 router.use(discoveryRouter);
+router.use(podcastsRouter);
 router.use(appRouter);
 
 export default router;
