@@ -28,3 +28,4 @@ export * from "./passwordResetTokens";
 export * from "./uploadJobs";
 export * from "./playHistory";
 export * from "./trackSkips";
+export * from "./ai";

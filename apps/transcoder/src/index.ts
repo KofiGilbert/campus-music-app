@@ -4,7 +4,7 @@ import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { and, eq, lt } from "drizzle-orm";
-import { db, uploadJobs, tracks } from "@workspace/db";
+import { db, uploadJobs, tracks, aiJobs } from "@workspace/db";
 import { audioStorage, storageKeys } from "@workspace/storage";
 import sharp from "sharp";
 
@@ -114,7 +114,12 @@ async function processJob(job: typeof uploadJobs.$inferSelect): Promise<void> {
     .set({ status: "completed", completedAt: new Date() })
     .where(eq(uploadJobs.id, job.id));
 
-  // TODO(commit 7): enqueue ai_jobs (embedding + stems) once the AI schema lands.
+  // Bridge to the AI pipeline: queue embedding + stems jobs for the future
+  // ai-worker (Phase 12). The transcoder does NOT run these.
+  await db.insert(aiJobs).values([
+    { type: "embedding", trackId: job.trackId },
+    { type: "stems", trackId: job.trackId },
+  ]);
 
   console.log(`[transcoder] completed job ${job.id}`);
 }
