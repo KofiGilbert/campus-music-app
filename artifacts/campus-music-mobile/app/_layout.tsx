@@ -13,6 +13,7 @@ import { AuthProvider } from "@/context/AuthContext";
 import { PlayerProvider } from "@/context/PlayerContext";
 import { RegistrationProvider } from "@/context/RegistrationContext";
 import { SocketProvider } from "@/context/SocketContext";
+import { PushRegistrar } from "@/components/PushRegistrar";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -84,6 +85,7 @@ export default function RootLayout() {
                 <SocketProvider>
                   <RegistrationProvider>
                     <PlayerProvider>
+                      <PushRegistrar />
                       <RootLayoutNav />
                     </PlayerProvider>
                   </RegistrationProvider>

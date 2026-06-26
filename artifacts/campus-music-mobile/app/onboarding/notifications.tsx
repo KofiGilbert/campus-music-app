@@ -4,6 +4,7 @@ import React from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
+import { registerForPushNotifications } from "@/lib/push";
 
 const NOTIF_ITEMS = [
   { icon: "musical-note" as const, color: "#e85d4a", title: "New drops", desc: "Get notified when artists you follow release new music" },
@@ -17,7 +18,9 @@ export default function NotificationsScreen() {
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 34 : insets.bottom;
 
-  const handleAllow = () => {
+  const handleAllow = async () => {
+    // Request OS permission + register the push token, then continue regardless.
+    await registerForPushNotifications();
     router.push("/onboarding/follow");
   };
 

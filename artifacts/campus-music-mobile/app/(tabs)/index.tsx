@@ -17,14 +17,16 @@ import {
 } from "react-native";
 import { TrackCover } from "@/components/TrackCover";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useQuery } from "@tanstack/react-query";
 import type { Post as ApiPost } from "@workspace/api-client-react";
-import { getFeed } from "@workspace/api-client-react";
+import { getFeed, getUnreadCount } from "@workspace/api-client-react";
 import { NowPlayingBar } from "@/components/NowPlayingBar";
 import { PostCard } from "@/components/PostCard";
 import { EcosystemDrawer } from "@/components/EcosystemDrawer";
 import { ResumePromptBanner } from "@/components/ResumePromptBanner";
 import { useAuth } from "@/context/AuthContext";
 import { usePlayer } from "@/context/PlayerContext";
+import { useSocketEvent } from "@/context/SocketContext";
 import { useColors } from "@/hooks/useColors";
 
 // ─── Seed live artists ────────────────────────────────────────────────────────
@@ -185,6 +187,16 @@ export default function HomeScreen() {
   const displayName = user?.name ?? "Campus";
   const initials = displayName.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
 
+  // Unread notification badge on the bell, kept live via the socket.
+  const { data: unread, refetch: refetchUnread } = useQuery({
+    queryKey: ["notifications", "unread"],
+    queryFn: () => getUnreadCount(),
+  });
+  useSocketEvent("notification:new", () => {
+    void refetchUnread();
+  });
+  const unreadCount = unread?.count ?? 0;
+
   const loadFeed = useCallback(
     async (reset: boolean) => {
       if (loadingRef.current) return;
@@ -262,8 +274,16 @@ export default function HomeScreen() {
                   Posts from people you follow
                 </Text>
               </View>
-              <Pressable style={[styles.iconBtn, { backgroundColor: colors.card }]}>
+              <Pressable
+                style={[styles.iconBtn, { backgroundColor: colors.card }]}
+                onPress={() => router.push("/notifications")}
+              >
                 <Ionicons name="notifications-outline" size={20} color={colors.foreground} />
+                {unreadCount > 0 && (
+                  <View style={styles.bellBadge}>
+                    <Text style={styles.bellBadgeText}>{unreadCount > 9 ? "9+" : unreadCount}</Text>
+                  </View>
+                )}
               </Pressable>
             </View>
 
@@ -383,6 +403,19 @@ const styles = StyleSheet.create({
   headerAvatarText: { color: "#fff", fontSize: 14, fontWeight: "700" },
   headerTitle: { fontSize: 22, fontWeight: "800", letterSpacing: -0.3 },
   headerSub: { fontSize: 12, marginTop: 1 },
+  bellBadge: {
+    position: "absolute",
+    top: 4,
+    right: 4,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: "#e0245e",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+  },
+  bellBadgeText: { color: "#fff", fontSize: 10, fontWeight: "700" },
   iconBtn: {
     width: 38,
     height: 38,
