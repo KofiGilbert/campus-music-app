@@ -24,7 +24,7 @@ export interface LiveKitService {
   mintToken(opts: MintOptions): Promise<string>;
 }
 
-class JoseLiveKitService implements LiveKitService {
+export class JoseLiveKitService implements LiveKitService {
   constructor(
     private readonly apiKey: string,
     private readonly apiSecret: string,
