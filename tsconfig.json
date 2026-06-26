@@ -10,6 +10,9 @@
       "path": "./lib/email"
     },
     {
+      "path": "./lib/storage"
+    },
+    {
       "path": "./lib/api-client-react"
     },
     {

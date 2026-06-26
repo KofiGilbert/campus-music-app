@@ -82,6 +82,7 @@ export const LoginResponse = zod.object({
     university: zod.string(),
     country: zod.string(),
     avatarUrl: zod.string().nullish(),
+    avatarUrls: zod.record(zod.string(), zod.string()).nullish(),
     emailVerified: zod.boolean(),
   }),
 });
@@ -144,6 +145,7 @@ export const GetMeResponse = zod.object({
   university: zod.string(),
   country: zod.string(),
   avatarUrl: zod.string().nullish(),
+  avatarUrls: zod.record(zod.string(), zod.string()).nullish(),
   emailVerified: zod.boolean(),
 });
 
@@ -165,6 +167,7 @@ export const UpdateMeResponse = zod.object({
   university: zod.string(),
   country: zod.string(),
   avatarUrl: zod.string().nullish(),
+  avatarUrls: zod.record(zod.string(), zod.string()).nullish(),
   emailVerified: zod.boolean(),
 });
 
@@ -229,6 +232,10 @@ export const GetTracksResponseItem = zod.object({
   playCount: zod.number(),
   likes: zod.number(),
   university: zod.string().nullable(),
+  audioUrls: zod.record(zod.string(), zod.string()).nullish(),
+  coverUrls: zod.record(zod.string(), zod.string()).nullish(),
+  stemUrls: zod.record(zod.string(), zod.string()).nullish(),
+  processingStatus: zod.enum(["pending", "processing", "ready", "failed"]).optional(),
 });
 export const GetTracksResponse = zod.array(GetTracksResponseItem);
 
@@ -253,6 +260,10 @@ export const GetTrendingTracksResponseItem = zod.object({
   playCount: zod.number(),
   likes: zod.number(),
   university: zod.string().nullable(),
+  audioUrls: zod.record(zod.string(), zod.string()).nullish(),
+  coverUrls: zod.record(zod.string(), zod.string()).nullish(),
+  stemUrls: zod.record(zod.string(), zod.string()).nullish(),
+  processingStatus: zod.enum(["pending", "processing", "ready", "failed"]).optional(),
 });
 export const GetTrendingTracksResponse = zod.array(GetTrendingTracksResponseItem);
 
@@ -277,6 +288,10 @@ export const GetMostLikedTracksResponseItem = zod.object({
   playCount: zod.number(),
   likes: zod.number(),
   university: zod.string().nullable(),
+  audioUrls: zod.record(zod.string(), zod.string()).nullish(),
+  coverUrls: zod.record(zod.string(), zod.string()).nullish(),
+  stemUrls: zod.record(zod.string(), zod.string()).nullish(),
+  processingStatus: zod.enum(["pending", "processing", "ready", "failed"]).optional(),
 });
 export const GetMostLikedTracksResponse = zod.array(GetMostLikedTracksResponseItem);
 
@@ -301,6 +316,10 @@ export const GetTrackByIdResponse = zod.object({
   playCount: zod.number(),
   likes: zod.number(),
   university: zod.string().nullable(),
+  audioUrls: zod.record(zod.string(), zod.string()).nullish(),
+  coverUrls: zod.record(zod.string(), zod.string()).nullish(),
+  stemUrls: zod.record(zod.string(), zod.string()).nullish(),
+  processingStatus: zod.enum(["pending", "processing", "ready", "failed"]).optional(),
 });
 
 /**
@@ -330,6 +349,10 @@ export const UpdateTrackResponse = zod.object({
   playCount: zod.number(),
   likes: zod.number(),
   university: zod.string().nullable(),
+  audioUrls: zod.record(zod.string(), zod.string()).nullish(),
+  coverUrls: zod.record(zod.string(), zod.string()).nullish(),
+  stemUrls: zod.record(zod.string(), zod.string()).nullish(),
+  processingStatus: zod.enum(["pending", "processing", "ready", "failed"]).optional(),
 });
 
 /**
@@ -369,15 +392,99 @@ export const LikeTrackResponse = zod.object({
 });
 
 /**
- * @summary Increment the play count for a track
+ * @summary Record a play (per-listen telemetry + play count)
  */
 export const RecordPlayParams = zod.object({
   id: zod.coerce.string(),
 });
 
+export const RecordPlayBody = zod.object({
+  secondsListened: zod.number().optional(),
+  completed: zod.boolean().optional(),
+  source: zod.string().optional(),
+  context: zod.string().nullish(),
+});
+
 export const RecordPlayResponse = zod.object({
   trackId: zod.string(),
   playCount: zod.number(),
+});
+
+/**
+ * @summary Record a track skip
+ */
+export const RecordSkipParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const RecordSkipBody = zod.object({
+  secondsBeforeSkip: zod.number().optional(),
+  source: zod.string().optional(),
+});
+
+export const RecordSkipResponse = zod.object({
+  trackId: zod.string(),
+  recorded: zod.boolean(),
+});
+
+/**
+ * @summary Cursor-paginated listening history
+ */
+export const GetListeningHistoryQueryParams = zod.object({
+  cursor: zod.coerce.string().optional(),
+});
+
+export const GetListeningHistoryResponse = zod.object({
+  history: zod.array(
+    zod.object({
+      track: zod.object({
+        id: zod.string(),
+        title: zod.string(),
+        artist: zod.string(),
+        artistId: zod.string(),
+        genre: zod.string(),
+        duration: zod.string(),
+        durationSeconds: zod.number(),
+        coverColor: zod.string(),
+        audioUrl: zod.string().nullable(),
+        coverUrl: zod.string().nullable(),
+        playCount: zod.number(),
+        likes: zod.number(),
+        university: zod.string().nullable(),
+        audioUrls: zod.record(zod.string(), zod.string()).nullish(),
+        coverUrls: zod.record(zod.string(), zod.string()).nullish(),
+        stemUrls: zod.record(zod.string(), zod.string()).nullish(),
+        processingStatus: zod.enum(["pending", "processing", "ready", "failed"]).optional(),
+      }),
+      playedAt: zod.string(),
+      secondsListened: zod.number(),
+      completed: zod.boolean(),
+    }),
+  ),
+  nextCursor: zod.string().nullable(),
+});
+
+/**
+ * @summary Cursor-paginated followers list
+ */
+export const GetFollowersParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetFollowersQueryParams = zod.object({
+  cursor: zod.coerce.string().optional(),
+});
+
+export const GetFollowersResponse = zod.object({
+  followers: zod.array(
+    zod.object({
+      id: zod.string(),
+      username: zod.string(),
+      name: zod.string(),
+      avatarUrl: zod.string().nullish(),
+    }),
+  ),
+  nextCursor: zod.string().nullable(),
 });
 
 /**
@@ -417,6 +524,10 @@ export const GetFeedResponseItem = zod.object({
   playCount: zod.number(),
   likes: zod.number(),
   university: zod.string().nullable(),
+  audioUrls: zod.record(zod.string(), zod.string()).nullish(),
+  coverUrls: zod.record(zod.string(), zod.string()).nullish(),
+  stemUrls: zod.record(zod.string(), zod.string()).nullish(),
+  processingStatus: zod.enum(["pending", "processing", "ready", "failed"]).optional(),
 });
 export const GetFeedResponse = zod.array(GetFeedResponseItem);
 
@@ -443,6 +554,10 @@ export const SearchResponse = zod.object({
       playCount: zod.number(),
       likes: zod.number(),
       university: zod.string().nullable(),
+      audioUrls: zod.record(zod.string(), zod.string()).nullish(),
+      coverUrls: zod.record(zod.string(), zod.string()).nullish(),
+      stemUrls: zod.record(zod.string(), zod.string()).nullish(),
+      processingStatus: zod.enum(["pending", "processing", "ready", "failed"]).optional(),
     }),
   ),
   artists: zod.array(
@@ -616,6 +731,10 @@ export const GetUserByIdResponse = zod.object({
       playCount: zod.number(),
       likes: zod.number(),
       university: zod.string().nullable(),
+      audioUrls: zod.record(zod.string(), zod.string()).nullish(),
+      coverUrls: zod.record(zod.string(), zod.string()).nullish(),
+      stemUrls: zod.record(zod.string(), zod.string()).nullish(),
+      processingStatus: zod.enum(["pending", "processing", "ready", "failed"]).optional(),
     }),
   ),
 });

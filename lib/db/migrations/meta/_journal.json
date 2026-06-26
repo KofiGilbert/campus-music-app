@@ -36,6 +36,27 @@
       "when": 1782458113393,
       "tag": "0004_email_verified",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1782462889657,
+      "tag": "0005_storage_transcoding",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1782463332634,
+      "tag": "0006_play_history",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1782463788575,
+      "tag": "0007_ai_foundations",
+      "breakpoints": true
     }
   ]
 }

@@ -1,132 +1,49 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { Readable } from "stream";
-import {
-  RequestUploadUrlBody,
-  RequestUploadUrlResponse,
-} from "@workspace/api-zod";
-import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
+import { randomUUID } from "node:crypto";
+import { audioStorage, storageKeys } from "@workspace/storage";
 import { requireAuth } from "../middlewares/auth";
-import { registerUpload } from "../lib/uploadRegistry";
 
 const router: IRouter = Router();
-const objectStorageService = new ObjectStorageService();
+
+function sanitizeFilename(name: string): string {
+  return name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120) || "upload";
+}
 
 /**
  * POST /storage/uploads/request-url
  *
- * Request a presigned URL for file upload.
- * Requires authentication — only signed-in users may upload files.
- * The client sends JSON metadata (name, size, contentType) — NOT the file.
- * Then uploads the file directly to the returned presigned URL.
+ * Returns a presigned R2 PUT URL + the object key. The client PUTs the file
+ * directly to R2, then sends the key to POST /tracks as `sourceKey` (audio)
+ * and/or `coverSourceKey`. Artist-only. The raw object is later consumed by the
+ * transcoder. Replaces the old GCS-proxy upload + object-serving routes —
+ * objects are now served via signed read URLs, not proxied through the API.
  */
-router.post("/storage/uploads/request-url", requireAuth, async (req: Request, res: Response) => {
-  const userId = req.userId!; // guaranteed by requireAuth
-  // Artist-only — token-side check, no DB round-trip (role is in the JWT claim).
-  if (req.auth!.role !== "artist") {
-    res.status(403).json({ error: "Only artists can upload files" });
-    return;
-  }
-
-  const parsed = RequestUploadUrlBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: "Missing or invalid required fields" });
-    return;
-  }
-
-  try {
-    const { name, size, contentType } = parsed.data;
-
-    const uploadURL = await objectStorageService.getObjectEntityUploadURL();
-    const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
-
-    registerUpload(objectPath, userId);
-
-    res.json(
-      RequestUploadUrlResponse.parse({
-        uploadURL,
-        objectPath,
-        metadata: { name, size, contentType },
-      }),
-    );
-  } catch (error) {
-    req.log.error({ err: error }, "Error generating upload URL");
-    res.status(500).json({ error: "Failed to generate upload URL" });
-  }
-});
-
-/**
- * GET /storage/public-objects/*
- *
- * Serve public assets from PUBLIC_OBJECT_SEARCH_PATHS.
- * These are unconditionally public — no authentication or ACL checks.
- */
-router.get("/storage/public-objects/*filePath", async (req: Request, res: Response) => {
-  try {
-    const raw = req.params.filePath;
-    const filePath = Array.isArray(raw) ? raw.join("/") : raw;
-    const file = await objectStorageService.searchPublicObject(filePath);
-    if (!file) {
-      res.status(404).json({ error: "File not found" });
+router.post(
+  "/storage/uploads/request-url",
+  requireAuth,
+  async (req: Request, res: Response): Promise<void> => {
+    if (req.auth!.role !== "artist") {
+      res.status(403).json({ error: "Only artists can upload files" });
       return;
     }
 
-    const response = await objectStorageService.downloadObject(file);
+    const { filename, contentType } = req.body as { filename?: unknown; contentType?: unknown };
+    const name =
+      typeof filename === "string" && filename.trim() ? sanitizeFilename(filename) : "upload";
+    const type =
+      typeof contentType === "string" && contentType ? contentType : "application/octet-stream";
 
-    res.status(response.status);
-    response.headers.forEach((value, key) => res.setHeader(key, value));
-
-    if (response.body) {
-      const nodeStream = Readable.fromWeb(response.body as ReadableStream<Uint8Array>);
-      nodeStream.pipe(res);
-    } else {
-      res.end();
+    // uuid-scoped raw key; the track row + final audio/ keys are created later by
+    // POST /tracks + the transcoder.
+    const key = storageKeys.rawUpload(randomUUID(), name);
+    try {
+      const uploadUrl = await audioStorage.getPresignedUploadUrl(key, type);
+      res.json({ uploadUrl, key });
+    } catch (err) {
+      req.log.error({ err }, "Error generating upload URL");
+      res.status(500).json({ error: "Failed to generate upload URL" });
     }
-  } catch (error) {
-    req.log.error({ err: error }, "Error serving public object");
-    res.status(500).json({ error: "Failed to serve public object" });
-  }
-});
-
-/**
- * GET /storage/objects/*
- *
- * Serve object entities from PRIVATE_OBJECT_DIR.
- * Only objects explicitly marked public (ACL visibility = "public") are served.
- * All other objects return 403 to prevent accidental exposure.
- */
-router.get("/storage/objects/*path", async (req: Request, res: Response) => {
-  try {
-    const raw = req.params.path;
-    const wildcardPath = Array.isArray(raw) ? raw.join("/") : raw;
-    const objectPath = `/objects/${wildcardPath}`;
-    const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
-
-    const isPublic = await objectStorageService.isObjectPublic(objectFile);
-    if (!isPublic) {
-      res.status(403).json({ error: "Forbidden" });
-      return;
-    }
-
-    const response = await objectStorageService.downloadObject(objectFile);
-
-    res.status(response.status);
-    response.headers.forEach((value, key) => res.setHeader(key, value));
-
-    if (response.body) {
-      const nodeStream = Readable.fromWeb(response.body as ReadableStream<Uint8Array>);
-      nodeStream.pipe(res);
-    } else {
-      res.end();
-    }
-  } catch (error) {
-    if (error instanceof ObjectNotFoundError) {
-      req.log.warn({ err: error }, "Object not found");
-      res.status(404).json({ error: "Object not found" });
-      return;
-    }
-    req.log.error({ err: error }, "Error serving object");
-    res.status(500).json({ error: "Failed to serve object" });
-  }
-});
+  },
+);
 
 export default router;

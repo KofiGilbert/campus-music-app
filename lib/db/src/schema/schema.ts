@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, index, text, timestamp, varchar } from "drizzle-orm/pg-core";
+import { boolean, index, integer, jsonb, text, timestamp, varchar } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { campusMusic } from "./namespace";
@@ -24,6 +24,9 @@ export const users = campusMusic.table(
     isSystem: boolean("is_system").notNull().default(false),
     isAdmin: boolean("is_admin").notNull().default(false),
     emailVerified: boolean("email_verified").notNull().default(false),
+    // AI: denormalized credit balance + granular consent flags.
+    aiCredits: integer("ai_credits").notNull().default(0),
+    aiConsent: jsonb("ai_consent").notNull().default({}),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

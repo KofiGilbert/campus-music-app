@@ -311,18 +311,37 @@ router.get("/auth/me", requireAuth, async (req, res): Promise<void> => {
 router.patch("/auth/me", requireAuth, async (req, res): Promise<void> => {
   const userId = req.userId!; // guaranteed by requireAuth
 
-  const { name, university, country, avatarUrl } = req.body as { name?: unknown; university?: unknown; country?: unknown; avatarUrl?: unknown };
+  const { name, university, country, avatarUrl, bio, genre, coverColor } = req.body as {
+    name?: unknown;
+    university?: unknown;
+    country?: unknown;
+    avatarUrl?: unknown;
+    bio?: unknown;
+    genre?: unknown;
+    coverColor?: unknown;
+  };
 
   if (name !== undefined && (typeof name !== "string" || !name.trim())) {
     res.status(400).json({ error: "Name must be a non-empty string" });
     return;
   }
 
-  const updates: { name?: string; university?: string; country?: string; avatarUrl?: string | null } = {};
+  const updates: {
+    name?: string;
+    university?: string;
+    country?: string;
+    avatarUrl?: string | null;
+    bio?: string;
+    genre?: string | null;
+    coverColor?: string | null;
+  } = {};
   if (typeof name === "string" && name.trim()) updates.name = name.trim();
   if (typeof university === "string") updates.university = university.trim();
   if (typeof country === "string") updates.country = country.trim();
   if (avatarUrl === null || typeof avatarUrl === "string") updates.avatarUrl = avatarUrl ?? null;
+  if (typeof bio === "string") updates.bio = bio;
+  if (genre === null || typeof genre === "string") updates.genre = genre ?? null;
+  if (coverColor === null || typeof coverColor === "string") updates.coverColor = coverColor ?? null;
 
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: "No valid fields to update" });
