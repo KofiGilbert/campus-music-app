@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
-import { getFeed, getArtists } from "@workspace/api-client-react";
+import { getTracks, getArtists } from "@workspace/api-client-react";
 import { NowPlayingBar } from "@/components/NowPlayingBar";
 import { EcosystemDrawer } from "@/components/EcosystemDrawer";
 import { TrackCover } from "@/components/TrackCover";
@@ -37,7 +37,7 @@ export default function SocialScreen() {
 
   const { data: feedTracks, isLoading: isFeedLoading } = useQuery({
     queryKey: ["feed"],
-    queryFn: () => getFeed({ limit: 20 }),
+    queryFn: () => getTracks(),
     staleTime: 5 * 60 * 1000,
   });
 

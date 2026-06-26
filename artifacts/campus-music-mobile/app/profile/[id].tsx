@@ -14,9 +14,10 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import { useQuery } from "@tanstack/react-query";
-import { getUserById } from "@workspace/api-client-react";
+import { getUserById, getUserPosts } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
 import { usePlayer } from "@/context/PlayerContext";
+import { PostCard } from "@/components/PostCard";
 import type { Track } from "@/components/MusicCard";
 import { getAlbumArtUrl } from "@/utils/albumArt";
 
@@ -50,6 +51,14 @@ export default function PublicProfileScreen() {
     staleTime: 60 * 1000,
     retry: 1,
   });
+
+  const { data: postsData } = useQuery({
+    queryKey: ["userPosts", id],
+    queryFn: () => getUserPosts(id!, { limit: 20 }),
+    enabled: !!id,
+    staleTime: 60 * 1000,
+  });
+  const posts = postsData?.items ?? [];
 
   const handleBack = () => {
     if (Platform.OS !== "web") Haptics.selectionAsync();
@@ -221,6 +230,16 @@ export default function PublicProfileScreen() {
             </Text>
           </View>
         )}
+
+        {/* Posts */}
+        {posts.length > 0 && (
+          <View style={styles.postsSection}>
+            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Posts</Text>
+            {posts.map((post) => (
+              <PostCard key={post.id} post={post} />
+            ))}
+          </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -275,6 +294,7 @@ const styles = StyleSheet.create({
   statNumber: { fontSize: 18, fontWeight: "700" },
   statLabel: { fontSize: 11 },
   tracksSection: { paddingHorizontal: 20, gap: 10 },
+  postsSection: { paddingHorizontal: 20, paddingTop: 24, gap: 4 },
   sectionTitle: { fontSize: 18, fontWeight: "700", marginBottom: 4 },
   trackRow: {
     flexDirection: "row",

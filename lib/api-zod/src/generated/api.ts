@@ -504,32 +504,320 @@ export const SaveToLibraryResponse = zod.object({
 });
 
 /**
- * @summary Get social feed (trending tracks sorted by play count)
+ * @summary Cursor-paginated post feed (follows + connections + global fallback)
  */
 export const GetFeedQueryParams = zod.object({
   limit: zod.coerce.number().optional(),
+  cursor: zod.coerce.string().optional(),
 });
 
-export const GetFeedResponseItem = zod.object({
-  id: zod.string(),
-  title: zod.string(),
-  artist: zod.string(),
-  artistId: zod.string(),
-  genre: zod.string(),
-  duration: zod.string(),
-  durationSeconds: zod.number(),
-  coverColor: zod.string(),
-  audioUrl: zod.string().nullable(),
-  coverUrl: zod.string().nullable(),
-  playCount: zod.number(),
-  likes: zod.number(),
-  university: zod.string().nullable(),
-  audioUrls: zod.record(zod.string(), zod.string()).nullish(),
-  coverUrls: zod.record(zod.string(), zod.string()).nullish(),
-  stemUrls: zod.record(zod.string(), zod.string()).nullish(),
-  processingStatus: zod.enum(["pending", "processing", "ready", "failed"]).optional(),
+export const GetFeedResponse = zod.object({
+  items: zod.array(
+    zod.object({
+      id: zod.string(),
+      author: zod
+        .union([
+          zod.object({
+            id: zod.string(),
+            username: zod.string(),
+            name: zod.string(),
+            avatarUrl: zod.string().nullish(),
+            role: zod.string(),
+          }),
+          zod.null(),
+        ])
+        .optional(),
+      body: zod.string(),
+      type: zod.enum(["original", "repost", "quote"]),
+      attachedTrack: zod
+        .union([
+          zod.object({
+            id: zod.string(),
+            title: zod.string(),
+            artist: zod.string(),
+            artistId: zod.string(),
+            genre: zod.string(),
+            duration: zod.string(),
+            durationSeconds: zod.number(),
+            coverColor: zod.string(),
+            audioUrl: zod.string().nullable(),
+            coverUrl: zod.string().nullable(),
+            playCount: zod.number(),
+            likes: zod.number(),
+            university: zod.string().nullable(),
+            audioUrls: zod.record(zod.string(), zod.string()).nullish(),
+            coverUrls: zod.record(zod.string(), zod.string()).nullish(),
+            stemUrls: zod.record(zod.string(), zod.string()).nullish(),
+            processingStatus: zod.enum(["pending", "processing", "ready", "failed"]).optional(),
+          }),
+          zod.null(),
+        ])
+        .optional(),
+      attachedImageUrl: zod.string().nullish(),
+      originalPost: zod.union([zod.unknown(), zod.null()]).optional(),
+      likeCount: zod.number(),
+      commentCount: zod.number(),
+      shareCount: zod.number(),
+      repostCount: zod.number(),
+      hasLiked: zod.boolean().nullish(),
+      hasReposted: zod.boolean().nullish(),
+      createdAt: zod.string(),
+    }),
+  ),
+  nextCursor: zod.string().nullable(),
 });
-export const GetFeedResponse = zod.array(GetFeedResponseItem);
+
+/**
+ * @summary Create a post (original / quote / repost)
+ */
+export const CreatePostBody = zod.object({
+  body: zod.string().optional(),
+  attachedTrackId: zod.string().optional(),
+  attachedImageUrl: zod.string().optional(),
+  type: zod.enum(["original", "repost", "quote"]).optional(),
+  originalPostId: zod.string().optional(),
+});
+
+/**
+ * @summary Get a single post
+ */
+export const GetPostParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetPostResponse = zod.object({
+  id: zod.string(),
+  author: zod
+    .union([
+      zod.object({
+        id: zod.string(),
+        username: zod.string(),
+        name: zod.string(),
+        avatarUrl: zod.string().nullish(),
+        role: zod.string(),
+      }),
+      zod.null(),
+    ])
+    .optional(),
+  body: zod.string(),
+  type: zod.enum(["original", "repost", "quote"]),
+  attachedTrack: zod
+    .union([
+      zod.object({
+        id: zod.string(),
+        title: zod.string(),
+        artist: zod.string(),
+        artistId: zod.string(),
+        genre: zod.string(),
+        duration: zod.string(),
+        durationSeconds: zod.number(),
+        coverColor: zod.string(),
+        audioUrl: zod.string().nullable(),
+        coverUrl: zod.string().nullable(),
+        playCount: zod.number(),
+        likes: zod.number(),
+        university: zod.string().nullable(),
+        audioUrls: zod.record(zod.string(), zod.string()).nullish(),
+        coverUrls: zod.record(zod.string(), zod.string()).nullish(),
+        stemUrls: zod.record(zod.string(), zod.string()).nullish(),
+        processingStatus: zod.enum(["pending", "processing", "ready", "failed"]).optional(),
+      }),
+      zod.null(),
+    ])
+    .optional(),
+  attachedImageUrl: zod.string().nullish(),
+  originalPost: zod.union([zod.unknown(), zod.null()]).optional(),
+  likeCount: zod.number(),
+  commentCount: zod.number(),
+  shareCount: zod.number(),
+  repostCount: zod.number(),
+  hasLiked: zod.boolean().nullish(),
+  hasReposted: zod.boolean().nullish(),
+  createdAt: zod.string(),
+});
+
+/**
+ * @summary Soft-delete own post
+ */
+export const DeletePostParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+/**
+ * @summary Toggle a post like
+ */
+export const TogglePostLikeParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const TogglePostLikeResponse = zod.object({
+  liked: zod.boolean(),
+  likeCount: zod.number(),
+});
+
+/**
+ * @summary Record a post share
+ */
+export const SharePostParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const SharePostBody = zod.object({
+  platform: zod.string().optional(),
+});
+
+export const SharePostResponse = zod.object({
+  shareCount: zod.number(),
+  deepLink: zod.string(),
+});
+
+/**
+ * @summary Repost a post
+ */
+export const RepostParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+/**
+ * @summary Remove the viewer's repost of a post
+ */
+export const UnrepostParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+/**
+ * @summary Cursor-paginated posts by a user
+ */
+export const GetUserPostsParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetUserPostsQueryParams = zod.object({
+  limit: zod.coerce.number().optional(),
+  cursor: zod.coerce.string().optional(),
+});
+
+export const GetUserPostsResponse = zod.object({
+  items: zod.array(
+    zod.object({
+      id: zod.string(),
+      author: zod
+        .union([
+          zod.object({
+            id: zod.string(),
+            username: zod.string(),
+            name: zod.string(),
+            avatarUrl: zod.string().nullish(),
+            role: zod.string(),
+          }),
+          zod.null(),
+        ])
+        .optional(),
+      body: zod.string(),
+      type: zod.enum(["original", "repost", "quote"]),
+      attachedTrack: zod
+        .union([
+          zod.object({
+            id: zod.string(),
+            title: zod.string(),
+            artist: zod.string(),
+            artistId: zod.string(),
+            genre: zod.string(),
+            duration: zod.string(),
+            durationSeconds: zod.number(),
+            coverColor: zod.string(),
+            audioUrl: zod.string().nullable(),
+            coverUrl: zod.string().nullable(),
+            playCount: zod.number(),
+            likes: zod.number(),
+            university: zod.string().nullable(),
+            audioUrls: zod.record(zod.string(), zod.string()).nullish(),
+            coverUrls: zod.record(zod.string(), zod.string()).nullish(),
+            stemUrls: zod.record(zod.string(), zod.string()).nullish(),
+            processingStatus: zod.enum(["pending", "processing", "ready", "failed"]).optional(),
+          }),
+          zod.null(),
+        ])
+        .optional(),
+      attachedImageUrl: zod.string().nullish(),
+      originalPost: zod.union([zod.unknown(), zod.null()]).optional(),
+      likeCount: zod.number(),
+      commentCount: zod.number(),
+      shareCount: zod.number(),
+      repostCount: zod.number(),
+      hasLiked: zod.boolean().nullish(),
+      hasReposted: zod.boolean().nullish(),
+      createdAt: zod.string(),
+    }),
+  ),
+  nextCursor: zod.string().nullable(),
+});
+
+/**
+ * @summary Comment on a post or track (or reply)
+ */
+export const CreateCommentBody = zod.object({
+  targetType: zod.enum(["post", "track"]).optional(),
+  targetId: zod.string().optional(),
+  body: zod.string(),
+  parentCommentId: zod.string().optional(),
+});
+
+/**
+ * @summary Cursor-paginated comments on a target
+ */
+export const GetCommentsQueryParams = zod.object({
+  targetType: zod.enum(["post", "track"]),
+  targetId: zod.coerce.string(),
+  limit: zod.coerce.number().optional(),
+  cursor: zod.coerce.string().optional(),
+});
+
+export const GetCommentsResponse = zod.object({
+  items: zod.array(
+    zod.object({
+      id: zod.string(),
+      author: zod
+        .union([
+          zod.object({
+            id: zod.string(),
+            username: zod.string(),
+            name: zod.string(),
+            avatarUrl: zod.string().nullish(),
+          }),
+          zod.null(),
+        ])
+        .optional(),
+      body: zod.string(),
+      parentCommentId: zod.string().nullish(),
+      replyCount: zod.number(),
+      likeCount: zod.number(),
+      hasLiked: zod.boolean().nullish(),
+      replies: zod.array(zod.unknown()),
+      createdAt: zod.string(),
+    }),
+  ),
+  nextCursor: zod.string().nullable(),
+});
+
+/**
+ * @summary Soft-delete own comment
+ */
+export const DeleteCommentParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+/**
+ * @summary Toggle a comment like
+ */
+export const ToggleCommentLikeParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ToggleCommentLikeResponse = zod.object({
+  liked: zod.boolean(),
+  likeCount: zod.number(),
+});
 
 /**
  * @summary Search tracks and artists

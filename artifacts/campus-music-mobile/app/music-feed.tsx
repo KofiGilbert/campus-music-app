@@ -3,7 +3,8 @@ import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   Dimensions,
   FlatList,
@@ -25,102 +26,34 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { usePlayer } from "@/context/PlayerContext";
 import { useColors } from "@/hooks/useColors";
 import { Track } from "@/components/MusicCard";
+import type { Comment as ApiComment } from "@workspace/api-client-react";
+import {
+  createComment,
+  getComments,
+  toggleCommentLike as apiToggleCommentLike,
+} from "@workspace/api-client-react";
 
 const { width: W, height: H } = Dimensions.get("window");
 
-// ── Seed comments keyed by track index ────────────────────────────────────────
-const COMMENT_POOL: string[][] = [
-  [
-    "This beat is everything 🔥",
-    "Playing this on repeat all week",
-    "Found my new study playlist",
-    "The production on this is insane",
-    "MIT kids really eating good rn",
-    "Who produced this? Need a collab ASAP",
-    "Heard this in the dining hall and Shazamed it immediately",
-    "This is why I transferred here honestly",
-    "The bass line at 1:24 is unreal 😭",
-    "My roommate is obsessed with this now",
-    "First campus track to hit different on headphones",
-    "Stream count should be way higher fr",
-  ],
-  [
-    "I discovered this artist last week omg",
-    "Soundtrack to my 2am grind sessions",
-    "Someone send me the Spotify link",
-    "This slaps different at the library",
-    "Bro really said study music 💀",
-    "Okay the bridge just made me stop walking",
-    "Put this on at 3am and cried a little ngl",
-    "This is giving Bon Iver but make it campus",
-    "My professor played this in class and I lost it",
-    "The lyrics though… whoever wrote this needs a deal",
-    "Saw them perform this live at the quad last semester 🙌",
-    "Whoever mixed this deserves an award no cap",
-  ],
-  [
-    "Campus Collective never misses",
-    "Drop an album please 🙏",
-    "This came on at the quad and everyone stopped",
-    "Clean mix, who produced this?",
-    "Been on loop since Friday",
-    "Every track on this playlist is a vibe",
-    "Finally some music that actually sounds like us",
-    "Played this at my study group and now everyone follows",
-    "The way this makes me feel understood 💙",
-    "Okay I need this on vinyl RIGHT NOW",
-    "Shout out whoever curated this drop fr",
-    "This is the soundtrack to my whole semester",
-  ],
-  [
-    "The vibe is unmatched",
-    "First time hearing this — instant follow",
-    "This is what campus music should be",
-    "Low key crying rn ngl",
-    "Perfect for late night walks 🌙",
-    "Showed this to my whole floor and now it's a group chat anthem",
-    "The melody lives rent free in my head",
-    "Okay this artist is about to blow up watch",
-    "Genuinely the most atmospheric thing I've heard this year",
-    "Campus music app is the best decision I ever made",
-    "Someone make this the graduation song please",
-    "This track is a whole cinematic universe",
-  ],
-  [
-    "THE HOOK IS CRAZY",
-    "Grew up listening to this genre, never heard it done this well",
-    "Artist collab when??",
-    "My whole dorm is listening to this rn",
-    "This should be at the next open mic",
-    "Woke up thinking about this track, that's how you know it hits",
-    "If this doesn't make the campus playlist I'm rioting",
-    "The energy in the drop is unmatched 🎶",
-    "I've recommended this to like 20 people today",
-    "This artist is going to be famous, calling it now",
-    "Okay the guitar in the outro gave me chills",
-    "This is peak campus culture right here",
-  ],
-];
+// ── Comment helpers ───────────────────────────────────────────────────────────
+// Avatar fallback colors, picked deterministically from a comment's id so the
+// same author keeps the same color within a session.
+const AVATAR_COLORS = ["#e85d4a", "#3b82f6", "#8b5cf6", "#10b981", "#f59e0b", "#ec4899", "#0ea5e9", "#14b8a6"];
+function colorForId(id: string): string {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash = (hash + id.charCodeAt(i)) % AVATAR_COLORS.length;
+  return AVATAR_COLORS[hash];
+}
 
-const COMMENTER_NAMES = ["Alex", "Jordan", "Mia", "DeShawn", "Priya", "Kofi", "Sofia", "Liam", "Amara", "Tyler", "Zoe", "Marcus", "Nia", "Ethan", "Layla"];
-const COMMENTER_COLORS = ["#e85d4a", "#3b82f6", "#8b5cf6", "#10b981", "#f59e0b", "#ec4899", "#0ea5e9", "#14b8a6"];
-const COMMENTER_PHOTOS: Record<string, string> = {
-  Alex:    "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=160&q=80&fit=crop&crop=face",
-  Jordan:  "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=160&q=80&fit=crop&crop=face",
-  Mia:     "https://images.unsplash.com/photo-1494790108755-2616b612b786?w=160&q=80&fit=crop&crop=face",
-  DeShawn: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=160&q=80&fit=crop&crop=face",
-  Priya:   "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=160&q=80&fit=crop&crop=face",
-  Kofi:    "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=160&q=80&fit=crop&crop=face",
-  Sofia:   "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=160&q=80&fit=crop&crop=face",
-  Liam:    "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=160&q=80&fit=crop&crop=face",
-  Amara:   "https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=160&q=80&fit=crop&crop=face",
-  Tyler:   "https://images.unsplash.com/photo-1488161628813-04466f872be2?w=160&q=80&fit=crop&crop=face",
-  Zoe:     "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=160&q=80&fit=crop&crop=face",
-  Marcus:  "https://images.unsplash.com/photo-1463453091185-61582044d556?w=160&q=80&fit=crop&crop=face",
-  Nia:     "https://images.unsplash.com/photo-1489424731084-a5d8b219a5bb?w=160&q=80&fit=crop&crop=face",
-  Ethan:   "https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=160&q=80&fit=crop&crop=face",
-  Layla:   "https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=160&q=80&fit=crop&crop=face",
-};
+function timeAgo(iso: string): string {
+  const then = new Date(iso).getTime();
+  const mins = Math.max(0, Math.floor((Date.now() - then) / 60000));
+  if (mins < 1) return "now";
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h`;
+  return `${Math.floor(hrs / 24)}d`;
+}
 
 type Reply = { id: string; name: string; photo: string; color: string; text: string; time: string; };
 type Comment = {
@@ -134,18 +67,28 @@ type Comment = {
   replies: Reply[];
 };
 
-function getCommentsForIndex(idx: number): Comment[] {
-  const pool = COMMENT_POOL[idx % COMMENT_POOL.length];
-  return pool.map((text, i) => ({
-    id: `${idx}-${i}`,
-    name: COMMENTER_NAMES[(idx + i) % COMMENTER_NAMES.length],
-    photo: COMMENTER_PHOTOS[COMMENTER_NAMES[(idx + i) % COMMENTER_NAMES.length]] ?? "",
-    color: COMMENTER_COLORS[(idx + i) % COMMENTER_COLORS.length],
-    text,
-    likes: (idx * 7 + i * 13 + 5) % 200 + 5,
-    time: `${[1, 3, 7, 12, 18, 25, 34, 45, 52, 61, 78, 90][i % 12]}m`,
-    replies: [],
-  }));
+function mapReply(r: ApiComment): Reply {
+  return {
+    id: r.id,
+    name: r.author?.name ?? "User",
+    photo: r.author?.avatarUrl ?? "",
+    color: colorForId(r.id),
+    text: r.body,
+    time: timeAgo(r.createdAt),
+  };
+}
+
+function mapComment(c: ApiComment): Comment {
+  return {
+    id: c.id,
+    name: c.author?.name ?? "User",
+    photo: c.author?.avatarUrl ?? "",
+    color: colorForId(c.id),
+    text: c.body,
+    likes: c.likeCount,
+    time: timeAgo(c.createdAt),
+    replies: (c.replies ?? []).map(mapReply),
+  };
 }
 
 // ── Single full-screen track card ─────────────────────────────────────────────
@@ -167,7 +110,6 @@ function TrackFeedCard({
   liked: boolean;
 }) {
   const insets = useSafeAreaInsets();
-  const seedComments = getCommentsForIndex(index);
   const cardHeight = Platform.OS === "web" ? H - 84 : H;
   const rawUrl = track.coverUrl ?? getAlbumArtUrl(track.genre, index);
   const artUrl = resizeCoverUrl(rawUrl, W * 2);
@@ -175,12 +117,26 @@ function TrackFeedCard({
 
   const [showComments, setShowComments] = useState(false);
   const [commentInput, setCommentInput] = useState("");
-  const [allComments, setAllComments] = useState<Comment[]>(seedComments);
+  const [allComments, setAllComments] = useState<Comment[]>([]);
   const [likedComments, setLikedComments] = useState<Set<string>>(new Set());
   const [reposted, setReposted] = useState(false);
   const [bookmarked, setBookmarked] = useState(false);
   const [replyingToId, setReplyingToId] = useState<string | null>(null);
   const [replyInput, setReplyInput] = useState("");
+
+  // Real comments for this track — fetched lazily the first time the sheet opens.
+  const { data: commentsData, refetch: refetchComments } = useQuery({
+    queryKey: ["comments", "track", track.id],
+    queryFn: () => getComments({ targetType: "track", targetId: track.id, limit: 50 }),
+    enabled: showComments,
+    staleTime: 30 * 1000,
+  });
+
+  useEffect(() => {
+    if (!commentsData) return;
+    setAllComments(commentsData.items.map(mapComment));
+    setLikedComments(new Set(commentsData.items.filter((c) => c.hasLiked).map((c) => c.id)));
+  }, [commentsData]);
 
   const openComments = () => {
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -189,6 +145,7 @@ function TrackFeedCard({
 
   const toggleCommentLike = (id: string) => {
     if (Platform.OS !== "web") Haptics.selectionAsync();
+    const wasLiked = likedComments.has(id);
     setLikedComments((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -196,27 +153,47 @@ function TrackFeedCard({
       return next;
     });
     setAllComments((prev) =>
-      prev.map((c) =>
-        c.id === id ? { ...c, likes: likedComments.has(id) ? c.likes - 1 : c.likes + 1 } : c
-      )
+      prev.map((c) => (c.id === id ? { ...c, likes: c.likes + (wasLiked ? -1 : 1) } : c))
     );
+    void apiToggleCommentLike(id).catch(() => {
+      // revert optimistic UI on failure
+      setLikedComments((prev) => {
+        const next = new Set(prev);
+        if (wasLiked) next.add(id);
+        else next.delete(id);
+        return next;
+      });
+      setAllComments((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, likes: c.likes + (wasLiked ? 1 : -1) } : c))
+      );
+    });
   };
 
-  const submitComment = () => {
-    if (!commentInput.trim()) return;
+  const submitComment = async () => {
+    const value = commentInput.trim();
+    if (!value) return;
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const newComment: Comment = {
-      id: `user-${Date.now()}`,
-      name: "You",
-      photo: "",
-      color: "#e85d4a",
-      text: commentInput.trim(),
-      likes: 0,
-      time: "now",
-      replies: [],
-    };
-    setAllComments((prev) => [newComment, ...prev]);
     setCommentInput("");
+    try {
+      await createComment({ targetType: "track", targetId: track.id, body: value });
+      await refetchComments();
+    } catch {
+      setCommentInput(value); // restore so the user can retry
+    }
+  };
+
+  const submitReply = async (parentId: string) => {
+    const value = replyInput.trim();
+    if (!value) return;
+    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setReplyInput("");
+    setReplyingToId(null);
+    try {
+      await createComment({ targetType: "track", targetId: track.id, body: value, parentCommentId: parentId });
+      await refetchComments();
+    } catch {
+      // swallow; the sheet stays open for retry
+    }
   };
 
   return (
@@ -447,29 +424,9 @@ function TrackFeedCard({
                           onChangeText={setReplyInput}
                           autoFocus
                           returnKeyType="send"
-                          onSubmitEditing={() => {
-                            if (!replyInput.trim()) return;
-                            if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                            setAllComments((prev) => prev.map((cm) =>
-                              cm.id === c.id
-                                ? { ...cm, replies: [...cm.replies, { id: `reply-${Date.now()}`, name: "You", photo: "", color: "#e85d4a", text: replyInput.trim(), time: "now" }] }
-                                : cm
-                            ));
-                            setReplyInput("");
-                            setReplyingToId(null);
-                          }}
+                          onSubmitEditing={() => submitReply(c.id)}
                         />
-                        <Pressable style={styles.sheetSendBtn} onPress={() => {
-                          if (!replyInput.trim()) return;
-                          if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                          setAllComments((prev) => prev.map((cm) =>
-                            cm.id === c.id
-                              ? { ...cm, replies: [...cm.replies, { id: `reply-${Date.now()}`, name: "You", photo: "", color: "#e85d4a", text: replyInput.trim(), time: "now" }] }
-                              : cm
-                          ));
-                          setReplyInput("");
-                          setReplyingToId(null);
-                        }}>
+                        <Pressable style={styles.sheetSendBtn} onPress={() => submitReply(c.id)}>
                           <Ionicons name="send" size={16} color="#e85d4a" />
                         </Pressable>
                       </View>
