@@ -13,6 +13,7 @@ import storageRouter from "./storage";
 import playbackRouter from "./playback";
 import usersRouter from "./users";
 import postsRouter from "./posts";
+import commentsRouter from "./comments";
 
 const router: IRouter = Router();
 
@@ -29,6 +30,7 @@ router.use(connectionsRouter);
 router.use(playbackRouter);
 router.use(usersRouter);
 router.use(postsRouter);
+router.use(commentsRouter);
 router.use(appRouter);
 
 export default router;
