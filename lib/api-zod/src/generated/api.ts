@@ -992,6 +992,183 @@ export const MarkConversationReadResponse = zod.object({
 });
 
 /**
+ * @summary Go live (host)
+ */
+export const CreateLiveSessionBody = zod.object({
+  title: zod.string().optional(),
+});
+
+/**
+ * @summary List currently-live sessions
+ */
+export const GetLiveSessionsResponse = zod.object({
+  items: zod.array(
+    zod.object({
+      id: zod.string(),
+      host: zod
+        .union([
+          zod.object({
+            id: zod.string(),
+            username: zod.string(),
+            name: zod.string(),
+            avatarUrl: zod.string().nullish(),
+            role: zod.string(),
+          }),
+          zod.null(),
+        ])
+        .optional(),
+      title: zod.string(),
+      status: zod.enum(["live", "ended"]),
+      transport: zod.string(),
+      listenerCount: zod.number(),
+      peakListenerCount: zod.number(),
+      recordingTrackId: zod.string().nullish(),
+      startedAt: zod.string(),
+      endedAt: zod.string().nullish(),
+    }),
+  ),
+});
+
+/**
+ * @summary Get a live session
+ */
+export const GetLiveSessionParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetLiveSessionResponse = zod.object({
+  id: zod.string(),
+  host: zod
+    .union([
+      zod.object({
+        id: zod.string(),
+        username: zod.string(),
+        name: zod.string(),
+        avatarUrl: zod.string().nullish(),
+        role: zod.string(),
+      }),
+      zod.null(),
+    ])
+    .optional(),
+  title: zod.string(),
+  status: zod.enum(["live", "ended"]),
+  transport: zod.string(),
+  listenerCount: zod.number(),
+  peakListenerCount: zod.number(),
+  recordingTrackId: zod.string().nullish(),
+  startedAt: zod.string(),
+  endedAt: zod.string().nullish(),
+});
+
+/**
+ * @summary End a live session (host)
+ */
+export const EndLiveSessionParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const EndLiveSessionResponse = zod.object({
+  id: zod.string(),
+  host: zod
+    .union([
+      zod.object({
+        id: zod.string(),
+        username: zod.string(),
+        name: zod.string(),
+        avatarUrl: zod.string().nullish(),
+        role: zod.string(),
+      }),
+      zod.null(),
+    ])
+    .optional(),
+  title: zod.string(),
+  status: zod.enum(["live", "ended"]),
+  transport: zod.string(),
+  listenerCount: zod.number(),
+  peakListenerCount: zod.number(),
+  recordingTrackId: zod.string().nullish(),
+  startedAt: zod.string(),
+  endedAt: zod.string().nullish(),
+});
+
+/**
+ * @summary Mint a LiveKit access token (host publishes, listener subscribes)
+ */
+export const GetLiveTokenParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetLiveTokenResponse = zod.object({
+  token: zod.string(),
+  wsUrl: zod.string().nullish(),
+  room: zod.string(),
+  role: zod.enum(["host", "listener"]),
+});
+
+/**
+ * @summary Register listener presence
+ */
+export const JoinLiveSessionParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const JoinLiveSessionResponse = zod.object({
+  listenerCount: zod.number(),
+});
+
+/**
+ * @summary Drop listener presence
+ */
+export const LeaveLiveSessionParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const LeaveLiveSessionResponse = zod.object({
+  listenerCount: zod.number(),
+});
+
+/**
+ * @summary Recent chat for a live session
+ */
+export const GetLiveChatParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetLiveChatQueryParams = zod.object({
+  cursor: zod.coerce.string().optional(),
+});
+
+export const GetLiveChatResponse = zod.object({
+  items: zod.array(
+    zod.object({
+      id: zod.string(),
+      sessionId: zod.string(),
+      user: zod
+        .object({
+          id: zod.string(),
+          name: zod.string(),
+          avatarUrl: zod.string().nullish(),
+        })
+        .optional(),
+      body: zod.string(),
+      createdAt: zod.string(),
+    }),
+  ),
+  nextCursor: zod.string().nullable(),
+});
+
+/**
+ * @summary Post a chat message (broadcast over the socket)
+ */
+export const SendLiveChatParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const SendLiveChatBody = zod.object({
+  body: zod.string(),
+});
+
+/**
  * @summary Search tracks and artists
  */
 export const SearchQueryParams = zod.object({
