@@ -54,13 +54,15 @@ All tables live in a dedicated `campus_music` Postgres schema. Seven tables tota
 
 | Table | Cols | Purpose | Notes |
 |---|---|---|---|
-| `users` | id, username, password, email, name, role(`listener`\|`artist`), university, country, avatarUrl, bio, genre, coverColor, is_admin, is_system | Auth + profile + artist data | Artists collapsed into `users` (Phase 0 §3.5). `is_system` marks seed artists (sentinel password blocks login). `is_admin` baked into JWT claims. No `emailVerified`, no `createdAt/updatedAt` yet. |
+| `users` | id, username, password, email, name, role(`listener`\|`artist`), university, country, avatarUrl, bio, genre, coverColor, is_admin, is_system, email_verified | Auth + profile + artist data | Artists collapsed into `users` (Phase 0 §3.5). `is_system` marks seed artists (sentinel password blocks login). `is_admin` baked into JWT claims. `email_verified` boolean added (Phase 1, default false). No `createdAt/updatedAt` yet. |
 | `tracks` | id, title, artist, artistId, genre, duration, durationSeconds, coverColor, audioUrl, coverUrl, playCount, university, createdAt, updatedAt | Music catalog | FK `artistId → users(id)` ON DELETE CASCADE. Indexes on `artist_id`, `created_at DESC`. |
 | `user_likes` | (userId, trackId) PK, createdAt | Track likes | FKs to `users(id)` + `tracks(id)` ON DELETE CASCADE |
 | `user_library` | (userId, trackId) PK | Saved-to-library | |
 | `artist_follows` | (userId, artistId, createdAt) PK | Artist follows | FKs to `users(id)` ON DELETE CASCADE |
 | `user_connections` | (fromUserId, toUserId) PK, status(`pending`\|`accepted`), createdAt, updatedAt | Friend graph | FKs to `users(id)` ON DELETE CASCADE |
 | `user_playback` | userId PK, trackId, position, updatedAt, createdAt | Cross-device resume | FKs to `users(id)` + `tracks(id)` ON DELETE CASCADE. **Single row per user → no playback history** |
+| `refresh_tokens` | id (UUID PK), userId (FK), tokenHash, familyId, expiresAt, revokedAt, createdAt | Refresh-token rotation | Added Phase 1. SHA-256 hashed. Family-based reuse detection. 30-day TTL. Indexes on `token_hash`, `user_id`. |
+| `password_reset_tokens` | id (UUID PK), userId (FK), tokenHash, expiresAt, usedAt, createdAt | Password reset flow | Added Phase 1. 1-hour TTL. Single-use (atomic `usedAt` conditional update). Index on `token_hash`. |
 
 **What's missing from the schema for an MVP that ships every feature already shown in the UI:**
 
@@ -74,24 +76,24 @@ All tables live in a dedicated `campus_music` Postgres schema. Seven tables tota
 - ❌ `podcasts` + `podcast_episodes` (Campus Podcasts on Discover is hardcoded).
 - ❌ `playlists` + `playlist_tracks` (we'll need these — see §2.11).
 - ❌ `flags` / `reports` / `bans` for moderation + admin panel.
-- ❌ `email_verifications` / `password_resets` (OTP is in-memory).
-- ❌ `refresh_tokens` (JWT is 30-day, no refresh flow).
+- ✅ ~~`email_verifications` / `password_resets`~~ — **Done (Phase 1).** `password_reset_tokens` table (single-use, 1-hour TTL). `emailVerified` boolean on `users` (set by OTP verify). OTP send now goes through `@workspace/email` (Resend in prod, console in dev).
+- ✅ ~~`refresh_tokens`~~ — **Done (Phase 1).** `refresh_tokens` table with SHA-256 hashed tokens, family-based reuse detection, 30-day TTL. JWT access tokens reduced to 15 minutes.
 - ✅ ~~Foreign keys + indexes~~ — **Done (Phase 0).** 9 FK constraints with ON DELETE CASCADE + 3 indexes (`users(role)`, `tracks(artist_id)`, `tracks(created_at DESC)`).
 - ⚠️ `createdAt`/`updatedAt` — **Partially done (Phase 0).** Added to `tracks`, `user_likes`, `user_connections`, `user_playback`. Still missing on `users` and `user_library`.
 - ✅ ~~Real SQL migration files~~ — **Done (Phase 0).** `drizzle-kit generate` + checked-in SQL in `lib/db/migrations/`. `push` replaced by `migrate`.
 
 ### 1.3 API Server (`artifacts/api-server/src/routes/`)
 
-The server is the most "real" part of the codebase. CORS is now allow-listed (Phase 0). JWT is HS256/30d (no refresh), Pino logging is wired up.
+The server is the most "real" part of the codebase. CORS is now allow-listed (Phase 0). JWT is HS256/15m access + 30d DB-backed refresh token (Phase 1). Pino logging is wired up.
 
 | Endpoint | Status | Notes |
 |---|---|---|
 | `GET /healthz` | ✅ | DB-ping health check added (Phase 0) |
 | `POST /auth/signup` / `/auth/register` | ✅ | bcrypt + JWT, no email verification gate |
 | `POST /auth/login` | ✅ | |
-| `POST /auth/logout` | ⚠️ | Returns `{message: "Logged out"}` — no server-side invalidation (stateless JWT) |
+| `POST /auth/logout` | ✅ Done (Phase 1) | Revokes the presented refresh token's family. |
 | `GET /auth/me` / `PATCH /auth/me` | ✅ | |
-| `POST /auth/otp/send` / `/auth/otp/verify` | ⚠️ | **In-memory `Map`** — wiped on restart. In dev, the code is **returned in the response** (`devCode`). No email sender wired. |
+| `POST /auth/otp/send` / `/auth/otp/verify` | ✅ Done (Phase 1) | **In-memory `Map`** for code storage (TTL-based). OTP send via `@workspace/email` (Resend in prod, console in dev). `devCode` only returned in non-production. `otp/verify` sets `emailVerified=true`. |
 | `POST /tracks` (create) | ✅ | Artist-only; promotes cover URL to public ACL if it was issued via upload registry |
 | `GET /tracks` | ✅ | Filters: genre / university / artistId / limit (in-memory filter, full table scan) |
 | `GET /tracks/trending` | ✅ | `ORDER BY playCount DESC` |
@@ -111,8 +113,11 @@ The server is the most "real" part of the codebase. CORS is now allow-listed (Ph
 | `POST /storage/uploads/request-url` | ✅ | Artist-only. Returns GCS presigned PUT URL via the Replit sidecar (`http://127.0.0.1:1106/object-storage/...`). **Hard dependency on Replit** for token issuance. |
 | `GET /storage/objects/:path` | ✅ | ACL-gated; supports public + private (owner-only) |
 | `GET/POST /playback` | ⚠️ | One row per user (`userId` is PK) → **no history**, only current position |
+| `POST /auth/refresh` | ✅ New (Phase 1) | Rotates refresh token (revoke old + issue new in same family). Returns fresh `{token, accessToken, refreshToken, user}`. |
+| `POST /auth/password/forgot` | ✅ New (Phase 1) | Rate-limited. Always returns `{sent: true}` (no email enumeration). Sends reset link via email. |
+| `POST /auth/password/reset` | ✅ New (Phase 1) | Rate-limited. Consumes single-use token, bcrypt-hashes new password, revokes all refresh tokens. |
 
-**Server-level gaps (updated after Phase 0):**
+**Server-level gaps (updated after Phase 1):**
 
 - ✅ ~~No `requireAuth` middleware~~ — **Done (Phase 0).** `requireAuth`, `optionalAuth`, `requireAdmin` middleware extracted to `lib/jwt`. Inline auth checks replaced across all routes.
 - ✅ ~~No rate limiting~~ — **Done (Phase 0).** Per-route `express-rate-limit` on auth endpoints (login, register, OTP). Per-route mounting (not router-level) to avoid firing on unrelated routes.
@@ -203,12 +208,12 @@ The entry point (`app/index.tsx`) now checks for a stored token and redirects un
 | JWT issuance | ✅ | – | P0 | – |
 | ~~**`requireAuth` middleware**~~ | ✅ Done (Phase 0) | – | P0 | – |
 | ~~**Auth gate in mobile app**~~ | ✅ Done (Phase 0) | – | P0 | – |
-| **Refresh-token rotation** (short-lived access JWT + DB-backed refresh token) | ❌ | M | P0 | `refresh_tokens` table |
-| **Real email verification** (gate signup behind verified email; OTP currently in-memory + leaked in dev response) | ⚠️ | M | P0 | email provider (§3.1), `email_verifications` table |
-| **Password reset flow** (request + verify + reset) | ❌ | M | P0 | email provider |
+| ~~**Refresh-token rotation**~~ | ✅ Done (Phase 1) | – | P0 | – |
+| ~~**Real email verification**~~ | ✅ Done (Phase 1) | – | P0 | – |
+| ~~**Password reset flow**~~ | ✅ Done (Phase 1) | – | P0 | – |
 | ~~**Rate limit auth endpoints**~~ | ✅ Done (Phase 0) | – | P0 | – |
 | Role-based onboarding (artist vs listener branches) | ✅ | – | P0 | – |
-| **Logout that actually invalidates the refresh token** | ⚠️ | S | P0 | refresh tokens |
+| ~~**Logout that actually invalidates the refresh token**~~ | ✅ Done (Phase 1) | – | P0 | – |
 | OAuth (Google / Apple sign-in) | ❌ | M | – | Post-MVP (§5) |
 | 2FA / TOTP | ❌ | M | – | Post-MVP (§5) |
 
@@ -484,11 +489,9 @@ Repurpose `artifacts/campus-music` (the legacy Vite SPA, currently only a splash
 
 ## 3. Key Architectural Decisions (needed BEFORE building)
 
-### 3.1 Email provider — for OTP, verification, password reset, digests
+### 3.1 Email provider — DONE (Phase 1)
 
-- **Options:** Resend, Postmark, SendGrid, AWS SES, Brevo.
-- **Recommendation: Resend.** Simplest DX, great deliverability for transactional mail, generous free tier (3K/mo), works from any node runtime, and the API is one fetch call. Postmark is the safe fallback if we hit volume limits.
-- **Action item:** add a single `EmailService` abstraction in `lib/email` so we can swap providers later without touching routes.
+- **Resolved: Resend.** `@workspace/email` package with `EmailService` interface + `ResendAdapter` (prod) + `ConsoleAdapter` (dev/CI fallback). Singleton based on `RESEND_API_KEY` env var. Templates for OTP and password-reset emails. Resend v6 installed. Domain verification + `RESEND_API_KEY` provisioning are user responsibilities when ready for real email send.
 
 ### 3.2 Admin app strategy
 
@@ -547,10 +550,9 @@ Live audio and Campus Music TV are different products and need different transpo
 
 - **Resolved:** Switched from `drizzle-kit push` to `drizzle-kit generate` + checked-in SQL migrations in `lib/db/migrations/`. Post-merge hook runs `pnpm db:migrate`. CI runs `migrate` against a fresh Postgres 16 service container. Baseline migration (`0000_init`) bootstraps from scratch; `0001_schema_hygiene` adds FKs, timestamps, and indexes.
 
-### 3.10 Token strategy
+### 3.10 Token strategy — DONE (Phase 1)
 
-- **Today:** HS256 JWT, 30-day expiry, no refresh, no rotation, no server-side invalidation. Insecure dev fallback secret.
-- **Recommendation:** 15-min access token + 30-day refresh token stored in a new `refresh_tokens` table (hashed). Rotate refresh on every use. `/auth/logout` deletes the row. Required to make a real "log out" button work and to support revocation when an account is banned.
+- **Resolved:** 15-min HS256 access JWT + 30-day refresh token stored in `refresh_tokens` table (SHA-256 hashed, family-based). Rotate refresh on every use; reuse detection revokes the entire family. `/auth/logout` revokes the family. `/auth/refresh` endpoint for rotation. Mobile 401 interceptor in `custom-fetch.ts` handles transparent refresh with de-duplication.
 
 ### 3.11 Admin authorization — DONE (Phase 0)
 
@@ -675,16 +677,22 @@ Live audio and Campus Music TV are different products and need different transpo
 
 **Effort:** ~5 dev-days. **Unblocks:** everything below.
 
-### Phase 1 — Real Auth (1 week)
+### Phase 1 — Real Auth (1 week) — COMPLETE
 
-- Refresh-token rotation + `refresh_tokens` table.
-- Email provider integration (Resend) + real OTP send.
-- Email verification gate at signup (block protected actions until verified).
-- Password reset flow.
+> **Merged:** PR #8 (7 commits, `feature/phase-1-real-auth → main`). CI green.
+
+- ✅ `@workspace/email` package: `EmailService` interface + `ResendAdapter` (prod) + `ConsoleAdapter` (dev/CI). Resend v6.
+- ✅ Refresh-token rotation: `refresh_tokens` table (SHA-256 hashed, family-based reuse detection, 30-day TTL). JWT access token reduced from 30d → 15 minutes. `POST /auth/refresh` rotates. `POST /auth/logout` revokes the family.
+- ✅ Password reset: `password_reset_tokens` table (1-hour TTL, single-use via atomic `usedAt` conditional update). `POST /auth/password/forgot` (rate-limited, no email enumeration) + `POST /auth/password/reset` (rate-limited, revokes all refresh tokens on success).
+- ✅ Email verification gate: `emailVerified` boolean on `users` (default false). `requireVerified` middleware gates `POST /tracks`. `otp/verify` sets `emailVerified=true`. OTP send via `emailService` (devCode only in non-production).
+- ✅ Mobile: 401 refresh interceptor in `custom-fetch.ts` (de-duped). `AuthContext` stores refresh token in SecureStore. Register-before-verify onboarding flow. Forgot/reset password screens. Upload tab shows verification gate.
+- ✅ Integration tests: refresh rotation + reuse detection, password reset lifecycle, email verification gate + OTP flow.
+- ✅ Migrations: 0002 (refresh_tokens), 0003 (password_reset_tokens), 0004 (email_verified).
+- ✅ OpenAPI spec + generated client updated for all new endpoints.
 - ~~Rate limiting on auth endpoints.~~ (Moved to Phase 0 — done.)
 - ~~`is_admin` flag in users + JWT claims.~~ (Moved to Phase 0 — done.)
 
-**Effort:** ~5 dev-days.
+**Effort:** ~5 dev-days. **New env vars:** `RESEND_API_KEY` (optional), `EMAIL_FROM` (optional), `APP_BASE_URL`.
 
 ### Phase 2 — Profiles + Storage + Audio Pipeline + AI Foundations (2.5 weeks)
 
@@ -905,7 +913,7 @@ Four core artist-side AI tools, all behind the `ai_credits` ledger.
 | Phase | Theme | Effort | Status |
 |---|---|---|---|
 | 0 | Foundations | 1 week | **COMPLETE** |
-| 1 | Real Auth | 1 week |
+| 1 | Real Auth | 1 week | **COMPLETE** |
 | 2 | Profiles + Storage + Audio Pipeline + **AI Foundations** (R2 + CDN + transcoder + embeddings + stems + lyrics) | 2.5 weeks |
 | 3 | Music Feed + Social Graph (comments/likes/shares/reposts) | 2 weeks |
 | 4 | WebSocket Gateway + Direct Messages | 2 weeks |
@@ -1015,4 +1023,4 @@ Things I deliberately did **not** put in the MVP because they require real user 
 
 ---
 
-*Phase 0 shipped. Continuing one phase at a time, with a PR per phase. Soft-launch target: ~12 calendar weeks from kickoff (2 engineers, parallel where possible).*
+*Phases 0–1 shipped. Continuing one phase at a time, with a PR per phase. Soft-launch target: ~12 calendar weeks from kickoff (2 engineers, parallel where possible).*
