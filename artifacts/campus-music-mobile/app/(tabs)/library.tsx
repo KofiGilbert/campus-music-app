@@ -1,7 +1,9 @@
 import { Ionicons } from "@/components/icons";
 import * as Haptics from "expo-haptics";
+import { router } from "expo-router";
 import React, { useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   Platform,
   Pressable,
@@ -10,22 +12,47 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { createPlaylist, getPlaylists } from "@workspace/api-client-react";
 import { MusicCard } from "@/components/MusicCard";
 import { NowPlayingBar } from "@/components/NowPlayingBar";
 import { usePlayer } from "@/context/PlayerContext";
 import { useColors } from "@/hooks/useColors";
 
-type Tab = "liked" | "library";
+type Tab = "liked" | "library" | "playlists";
 
 export default function LibraryScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
   const { currentTrack, isPlaying, isLoading, playTrack, playNext, addToQueue, togglePlay, nextTrack, toggleLike, likedTracks, libraryTracks, tracks, addToLibrary } = usePlayer();
   const [activeTab, setActiveTab] = useState<Tab>("liked");
+  const [creating, setCreating] = useState(false);
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
 
   const displayedTracks = activeTab === "liked" ? likedTracks : libraryTracks;
+
+  const { data: playlistsData } = useQuery({
+    queryKey: ["playlists"],
+    queryFn: () => getPlaylists(),
+    enabled: activeTab === "playlists",
+  });
+  const playlists = playlistsData?.items ?? [];
+
+  const handleCreate = async () => {
+    if (creating) return;
+    setCreating(true);
+    try {
+      const created = await createPlaylist({ name: "New Playlist" });
+      await queryClient.invalidateQueries({ queryKey: ["playlists"] });
+      router.push(`/playlist/${created.id}`);
+    } catch {
+      /* ignore */
+    } finally {
+      setCreating(false);
+    }
+  };
 
   const handleTabPress = (tab: Tab) => {
     if (Platform.OS !== "web") Haptics.selectionAsync();
@@ -39,7 +66,7 @@ export default function LibraryScreen() {
 
         {/* Tab switcher */}
         <View style={[styles.tabSwitcher, { backgroundColor: colors.card }]}>
-          {(["liked", "library"] as Tab[]).map((tab) => (
+          {(["liked", "library", "playlists"] as Tab[]).map((tab) => (
             <Pressable
               key={tab}
               onPress={() => handleTabPress(tab)}
@@ -49,7 +76,7 @@ export default function LibraryScreen() {
               ]}
             >
               <Ionicons
-                name={tab === "liked" ? "heart" : "library"}
+                name={tab === "liked" ? "heart" : tab === "library" ? "library" : "list"}
                 size={14}
                 color={activeTab === tab ? colors.primaryForeground : colors.mutedForeground}
               />
@@ -59,48 +86,99 @@ export default function LibraryScreen() {
                   { color: activeTab === tab ? colors.primaryForeground : colors.mutedForeground },
                 ]}
               >
-                {tab === "liked" ? "Liked" : "Saved"}
+                {tab === "liked" ? "Liked" : tab === "library" ? "Saved" : "Playlists"}
               </Text>
             </Pressable>
           ))}
         </View>
       </View>
 
-      <FlatList
-        data={displayedTracks}
-        keyExtractor={(item) => item.id}
-        style={{ flex: 1 }}
-        contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 160, paddingTop: 8 }}
-        renderItem={({ item }) => (
-          <MusicCard
-            track={item}
-            onPlay={playTrack}
-            onLike={toggleLike}
-            onPlayNext={playNext}
-            onAddToQueue={addToQueue}
-            compact
-          />
-        )}
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Ionicons
-              name={activeTab === "liked" ? "heart-outline" : "library-outline"}
-              size={52}
-              color={colors.mutedForeground}
+      {activeTab === "playlists" ? (
+        <FlatList
+          data={playlists}
+          keyExtractor={(p) => p.id}
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 160, paddingTop: 8 }}
+          ListHeaderComponent={
+            <Pressable
+              style={[styles.newPlaylist, { borderColor: colors.border }]}
+              onPress={handleCreate}
+              disabled={creating}
+            >
+              {creating ? (
+                <ActivityIndicator color={colors.primary} size="small" />
+              ) : (
+                <>
+                  <View style={[styles.newPlaylistIcon, { backgroundColor: colors.primary }]}>
+                    <Ionicons name="add" size={22} color="#fff" />
+                  </View>
+                  <Text style={[styles.playlistName, { color: colors.foreground }]}>New Playlist</Text>
+                </>
+              )}
+            </Pressable>
+          }
+          renderItem={({ item }) => (
+            <Pressable
+              style={styles.playlistRow}
+              onPress={() => router.push(`/playlist/${item.id}`)}
+            >
+              <View
+                style={[
+                  styles.playlistCover,
+                  { backgroundColor: item.coverColor ?? (item.isLikedSongs ? "#e0245e" : colors.card) },
+                ]}
+              >
+                <Ionicons name={item.isLikedSongs ? "heart" : "musical-notes"} size={22} color="#fff" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.playlistName, { color: colors.foreground }]} numberOfLines={1}>{item.name}</Text>
+                <Text style={[styles.playlistMeta, { color: colors.mutedForeground }]}>
+                  {item.trackCount} track{item.trackCount === 1 ? "" : "s"}
+                  {item.isPublic ? " · Public" : ""}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={colors.mutedForeground} />
+            </Pressable>
+          )}
+          showsVerticalScrollIndicator={false}
+        />
+      ) : (
+        <FlatList
+          data={displayedTracks}
+          keyExtractor={(item) => item.id}
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 160, paddingTop: 8 }}
+          renderItem={({ item }) => (
+            <MusicCard
+              track={item}
+              onPlay={playTrack}
+              onLike={toggleLike}
+              onPlayNext={playNext}
+              onAddToQueue={addToQueue}
+              compact
             />
-            <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
-              {activeTab === "liked" ? "No liked tracks yet" : "Your library is empty"}
-            </Text>
-            <Text style={[styles.emptySubtitle, { color: colors.mutedForeground }]}>
-              {activeTab === "liked"
-                ? "Heart songs to see them here"
-                : "Add songs to build your collection"}
-            </Text>
-          </View>
-        }
-        showsVerticalScrollIndicator={false}
-        scrollEnabled
-      />
+          )}
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Ionicons
+                name={activeTab === "liked" ? "heart-outline" : "library-outline"}
+                size={52}
+                color={colors.mutedForeground}
+              />
+              <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
+                {activeTab === "liked" ? "No liked tracks yet" : "Your library is empty"}
+              </Text>
+              <Text style={[styles.emptySubtitle, { color: colors.mutedForeground }]}>
+                {activeTab === "liked"
+                  ? "Heart songs to see them here"
+                  : "Add songs to build your collection"}
+              </Text>
+            </View>
+          }
+          showsVerticalScrollIndicator={false}
+          scrollEnabled
+        />
+      )}
 
       {/* Quick add section */}
       {activeTab === "library" && libraryTracks.length === 0 && (
@@ -208,4 +286,29 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     textAlign: "center",
   },
+  newPlaylist: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    paddingVertical: 12,
+    marginBottom: 6,
+    borderBottomWidth: 1,
+  },
+  newPlaylistIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  playlistRow: { flexDirection: "row", alignItems: "center", gap: 14, paddingVertical: 10 },
+  playlistCover: {
+    width: 52,
+    height: 52,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  playlistName: { fontSize: 15, fontWeight: "600" },
+  playlistMeta: { fontSize: 13, marginTop: 2 },
 });
