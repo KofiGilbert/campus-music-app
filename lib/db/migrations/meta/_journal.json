@@ -71,6 +71,13 @@
       "when": 1782505717944,
       "tag": "0009_dm_conversations",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1782506742177,
+      "tag": "0010_live_sessions",
+      "breakpoints": true
     }
   ]
 }
