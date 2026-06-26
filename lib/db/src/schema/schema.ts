@@ -24,6 +24,9 @@ export const users = campusMusic.table(
     isSystem: boolean("is_system").notNull().default(false),
     isAdmin: boolean("is_admin").notNull().default(false),
     emailVerified: boolean("email_verified").notNull().default(false),
+    // Admin moderation: blue-check verification + ban (login blocked while set).
+    verified: boolean("verified").notNull().default(false),
+    bannedAt: timestamp("banned_at", { withTimezone: true }),
     // AI: denormalized credit balance + granular consent flags.
     aiCredits: integer("ai_credits").notNull().default(0),
     aiConsent: jsonb("ai_consent").notNull().default({}),
