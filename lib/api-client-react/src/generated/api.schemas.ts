@@ -431,6 +431,65 @@ export interface SendLiveChatBody {
   body: string;
 }
 
+export interface NotificationActor {
+  id: string;
+  username: string;
+  name: string;
+  /** @nullable */
+  avatarUrl?: string | null;
+  role: string;
+}
+
+export interface Notification {
+  id: string;
+  type: string;
+  actor?: NotificationActor | null;
+  /** @nullable */
+  targetType?: string | null;
+  /** @nullable */
+  targetId?: string | null;
+  /** @nullable */
+  body?: string | null;
+  /** @nullable */
+  readAt?: string | null;
+  createdAt: string;
+}
+
+export interface NotificationsResponse {
+  items: Notification[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
+export interface UnreadCountResponse {
+  count: number;
+}
+
+export interface OkResponse {
+  ok: boolean;
+}
+
+export type NotifPrefsResponsePrefs = { [key: string]: boolean };
+
+export interface NotifPrefsResponse {
+  prefs: NotifPrefsResponsePrefs;
+}
+
+export type NotifPrefsBodyPrefs = { [key: string]: boolean };
+
+export interface NotifPrefsBody {
+  prefs: NotifPrefsBodyPrefs;
+}
+
+export interface RegisterPushTokenBody {
+  token: string;
+  platform?: string;
+}
+
+export interface UnregisterPushTokenBody {
+  token: string;
+}
+
 export interface Artist {
   id: string;
   name: string;
@@ -733,6 +792,11 @@ export type GetMessagesParams = {
 };
 
 export type GetLiveChatParams = {
+  cursor?: string;
+};
+
+export type GetNotificationsParams = {
+  limit?: number;
   cursor?: string;
 };
 

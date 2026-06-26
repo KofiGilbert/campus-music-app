@@ -1,8 +1,9 @@
 import { Router, type IRouter } from "express";
 import { and, desc, eq, inArray, lt, sql } from "drizzle-orm";
-import { db, liveChatMessages, liveSessions, users } from "@workspace/db";
+import { artistFollows, db, liveChatMessages, liveSessions, users } from "@workspace/db";
 import { optionalAuth, requireAuth, requireVerified } from "../middlewares/auth";
 import { livekit } from "../lib/livekit";
+import { notifyMany } from "../lib/notify";
 import { liveRoom, realtime } from "../realtime/gateway";
 
 const router: IRouter = Router();
@@ -68,6 +69,16 @@ router.post("/live/sessions", requireAuth, requireVerified, async (req, res): Pr
   // Room name embeds the id so it's unique + discoverable.
   const roomName = `live_${created.id}`;
   await db.update(liveSessions).set({ roomName }).where(eq(liveSessions.id, created.id));
+
+  // Notify followers that this artist is live.
+  const followers = await db
+    .select({ userId: artistFollows.userId })
+    .from(artistFollows)
+    .where(eq(artistFollows.artistId, hostUserId));
+  await notifyMany(
+    followers.map((f) => f.userId),
+    { type: "live_started", actorUserId: hostUserId, targetType: "live", targetId: created.id, body: titleText || "is live now" },
+  );
 
   const [shaped] = await shapeSessions([{ ...created, roomName }]);
   res.status(201).json(shaped);

@@ -47,6 +47,7 @@ import type {
   GetLiveChatParams,
   GetMessagesParams,
   GetMostLikedTracksParams,
+  GetNotificationsParams,
   GetTracksParams,
   GetTrendingTracksParams,
   GetUserPostsParams,
@@ -68,6 +69,10 @@ import type {
   MarkReadResponse,
   Message,
   MessagesResponse,
+  NotifPrefsBody,
+  NotifPrefsResponse,
+  NotificationsResponse,
+  OkResponse,
   OtpSendBody,
   OtpSendResponse,
   OtpVerifyBody,
@@ -81,6 +86,7 @@ import type {
   RefreshBody,
   RefreshResponse,
   RegisterBody,
+  RegisterPushTokenBody,
   ResetPasswordBody,
   ResetPasswordResponse,
   RespondBody,
@@ -96,6 +102,8 @@ import type {
   SkipBody,
   SkipResponse,
   Track,
+  UnreadCountResponse,
+  UnregisterPushTokenBody,
   UpdateArtistBody,
   UpdateProfileBody,
   UpdateTrackBody,
@@ -4378,6 +4386,611 @@ export const useSendLiveChat = <TError = ErrorType<unknown>, TContext = unknown>
   TContext
 > => {
   return useMutation(getSendLiveChatMutationOptions(options));
+};
+
+/**
+ * @summary Cursor-paginated notification inbox
+ */
+export const getGetNotificationsUrl = (params?: GetNotificationsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/notifications?${stringifiedParams}`
+    : `/api/notifications`;
+};
+
+export const getNotifications = async (
+  params?: GetNotificationsParams,
+  options?: RequestInit,
+): Promise<NotificationsResponse> => {
+  return customFetch<NotificationsResponse>(getGetNotificationsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetNotificationsQueryKey = (params?: GetNotificationsParams) => {
+  return [`/api/notifications`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetNotificationsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getNotifications>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetNotificationsParams,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getNotifications>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetNotificationsQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getNotifications>>> = ({ signal }) =>
+    getNotifications(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getNotifications>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetNotificationsQueryResult = NonNullable<Awaited<ReturnType<typeof getNotifications>>>;
+export type GetNotificationsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Cursor-paginated notification inbox
+ */
+
+export function useGetNotifications<
+  TData = Awaited<ReturnType<typeof getNotifications>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetNotificationsParams,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getNotifications>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetNotificationsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Unread notification count (bell badge)
+ */
+export const getGetUnreadCountUrl = () => {
+  return `/api/notifications/unread-count`;
+};
+
+export const getUnreadCount = async (options?: RequestInit): Promise<UnreadCountResponse> => {
+  return customFetch<UnreadCountResponse>(getGetUnreadCountUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetUnreadCountQueryKey = () => {
+  return [`/api/notifications/unread-count`] as const;
+};
+
+export const getGetUnreadCountQueryOptions = <
+  TData = Awaited<ReturnType<typeof getUnreadCount>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getUnreadCount>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetUnreadCountQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getUnreadCount>>> = ({ signal }) =>
+    getUnreadCount({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getUnreadCount>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetUnreadCountQueryResult = NonNullable<Awaited<ReturnType<typeof getUnreadCount>>>;
+export type GetUnreadCountQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Unread notification count (bell badge)
+ */
+
+export function useGetUnreadCount<
+  TData = Awaited<ReturnType<typeof getUnreadCount>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getUnreadCount>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetUnreadCountQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Mark one notification read
+ */
+export const getMarkNotificationReadUrl = (id: string) => {
+  return `/api/notifications/${id}/read`;
+};
+
+export const markNotificationRead = async (
+  id: string,
+  options?: RequestInit,
+): Promise<OkResponse> => {
+  return customFetch<OkResponse>(getMarkNotificationReadUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getMarkNotificationReadMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof markNotificationRead>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof markNotificationRead>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["markNotificationRead"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof markNotificationRead>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return markNotificationRead(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MarkNotificationReadMutationResult = NonNullable<
+  Awaited<ReturnType<typeof markNotificationRead>>
+>;
+
+export type MarkNotificationReadMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Mark one notification read
+ */
+export const useMarkNotificationRead = <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof markNotificationRead>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof markNotificationRead>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getMarkNotificationReadMutationOptions(options));
+};
+
+/**
+ * @summary Mark all notifications read
+ */
+export const getMarkAllNotificationsReadUrl = () => {
+  return `/api/notifications/read-all`;
+};
+
+export const markAllNotificationsRead = async (options?: RequestInit): Promise<OkResponse> => {
+  return customFetch<OkResponse>(getMarkAllNotificationsReadUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getMarkAllNotificationsReadMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof markAllNotificationsRead>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof markAllNotificationsRead>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["markAllNotificationsRead"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof markAllNotificationsRead>>,
+    void
+  > = () => {
+    return markAllNotificationsRead(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MarkAllNotificationsReadMutationResult = NonNullable<
+  Awaited<ReturnType<typeof markAllNotificationsRead>>
+>;
+
+export type MarkAllNotificationsReadMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Mark all notifications read
+ */
+export const useMarkAllNotificationsRead = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof markAllNotificationsRead>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof markAllNotificationsRead>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getMarkAllNotificationsReadMutationOptions(options));
+};
+
+/**
+ * @summary Per-type notification preferences
+ */
+export const getGetNotificationPrefsUrl = () => {
+  return `/api/notifications/prefs`;
+};
+
+export const getNotificationPrefs = async (options?: RequestInit): Promise<NotifPrefsResponse> => {
+  return customFetch<NotifPrefsResponse>(getGetNotificationPrefsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetNotificationPrefsQueryKey = () => {
+  return [`/api/notifications/prefs`] as const;
+};
+
+export const getGetNotificationPrefsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getNotificationPrefs>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getNotificationPrefs>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetNotificationPrefsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getNotificationPrefs>>> = ({ signal }) =>
+    getNotificationPrefs({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getNotificationPrefs>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetNotificationPrefsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getNotificationPrefs>>
+>;
+export type GetNotificationPrefsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Per-type notification preferences
+ */
+
+export function useGetNotificationPrefs<
+  TData = Awaited<ReturnType<typeof getNotificationPrefs>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getNotificationPrefs>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetNotificationPrefsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Merge per-type notification toggles
+ */
+export const getUpdateNotificationPrefsUrl = () => {
+  return `/api/notifications/prefs`;
+};
+
+export const updateNotificationPrefs = async (
+  notifPrefsBody: NotifPrefsBody,
+  options?: RequestInit,
+): Promise<NotifPrefsResponse> => {
+  return customFetch<NotifPrefsResponse>(getUpdateNotificationPrefsUrl(), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(notifPrefsBody),
+  });
+};
+
+export const getUpdateNotificationPrefsMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateNotificationPrefs>>,
+    TError,
+    { data: BodyType<NotifPrefsBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateNotificationPrefs>>,
+  TError,
+  { data: BodyType<NotifPrefsBody> },
+  TContext
+> => {
+  const mutationKey = ["updateNotificationPrefs"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateNotificationPrefs>>,
+    { data: BodyType<NotifPrefsBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return updateNotificationPrefs(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateNotificationPrefsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateNotificationPrefs>>
+>;
+export type UpdateNotificationPrefsMutationBody = BodyType<NotifPrefsBody>;
+export type UpdateNotificationPrefsMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Merge per-type notification toggles
+ */
+export const useUpdateNotificationPrefs = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateNotificationPrefs>>,
+    TError,
+    { data: BodyType<NotifPrefsBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateNotificationPrefs>>,
+  TError,
+  { data: BodyType<NotifPrefsBody> },
+  TContext
+> => {
+  return useMutation(getUpdateNotificationPrefsMutationOptions(options));
+};
+
+/**
+ * @summary Register a device push token
+ */
+export const getRegisterPushTokenUrl = () => {
+  return `/api/push/tokens`;
+};
+
+export const registerPushToken = async (
+  registerPushTokenBody: RegisterPushTokenBody,
+  options?: RequestInit,
+): Promise<OkResponse> => {
+  return customFetch<OkResponse>(getRegisterPushTokenUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(registerPushTokenBody),
+  });
+};
+
+export const getRegisterPushTokenMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof registerPushToken>>,
+    TError,
+    { data: BodyType<RegisterPushTokenBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof registerPushToken>>,
+  TError,
+  { data: BodyType<RegisterPushTokenBody> },
+  TContext
+> => {
+  const mutationKey = ["registerPushToken"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof registerPushToken>>,
+    { data: BodyType<RegisterPushTokenBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return registerPushToken(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RegisterPushTokenMutationResult = NonNullable<
+  Awaited<ReturnType<typeof registerPushToken>>
+>;
+export type RegisterPushTokenMutationBody = BodyType<RegisterPushTokenBody>;
+export type RegisterPushTokenMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Register a device push token
+ */
+export const useRegisterPushToken = <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof registerPushToken>>,
+    TError,
+    { data: BodyType<RegisterPushTokenBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof registerPushToken>>,
+  TError,
+  { data: BodyType<RegisterPushTokenBody> },
+  TContext
+> => {
+  return useMutation(getRegisterPushTokenMutationOptions(options));
+};
+
+/**
+ * @summary Unregister a device push token
+ */
+export const getUnregisterPushTokenUrl = () => {
+  return `/api/push/tokens`;
+};
+
+export const unregisterPushToken = async (
+  unregisterPushTokenBody: UnregisterPushTokenBody,
+  options?: RequestInit,
+): Promise<OkResponse> => {
+  return customFetch<OkResponse>(getUnregisterPushTokenUrl(), {
+    ...options,
+    method: "DELETE",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(unregisterPushTokenBody),
+  });
+};
+
+export const getUnregisterPushTokenMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof unregisterPushToken>>,
+    TError,
+    { data: BodyType<UnregisterPushTokenBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof unregisterPushToken>>,
+  TError,
+  { data: BodyType<UnregisterPushTokenBody> },
+  TContext
+> => {
+  const mutationKey = ["unregisterPushToken"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof unregisterPushToken>>,
+    { data: BodyType<UnregisterPushTokenBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return unregisterPushToken(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UnregisterPushTokenMutationResult = NonNullable<
+  Awaited<ReturnType<typeof unregisterPushToken>>
+>;
+export type UnregisterPushTokenMutationBody = BodyType<UnregisterPushTokenBody>;
+export type UnregisterPushTokenMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Unregister a device push token
+ */
+export const useUnregisterPushToken = <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof unregisterPushToken>>,
+    TError,
+    { data: BodyType<UnregisterPushTokenBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof unregisterPushToken>>,
+  TError,
+  { data: BodyType<UnregisterPushTokenBody> },
+  TContext
+> => {
+  return useMutation(getUnregisterPushTokenMutationOptions(options));
 };
 
 /**

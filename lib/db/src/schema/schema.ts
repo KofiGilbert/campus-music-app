@@ -27,6 +27,8 @@ export const users = campusMusic.table(
     // AI: denormalized credit balance + granular consent flags.
     aiCredits: integer("ai_credits").notNull().default(0),
     aiConsent: jsonb("ai_consent").notNull().default({}),
+    // Per-type notification preferences (e.g. { "follow": false }). Absent key = on.
+    notifPrefs: jsonb("notif_prefs").notNull().default({}),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

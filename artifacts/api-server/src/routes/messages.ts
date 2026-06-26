@@ -11,6 +11,7 @@ import {
 import { requireAuth, requireVerified } from "../middlewares/auth";
 import { shapeMessage, shapeMessages, type ShapedMessage } from "../lib/messageShape";
 import { conversationRoom, realtime } from "../realtime/gateway";
+import { notifyMany } from "../lib/notify";
 
 const router: IRouter = Router();
 
@@ -353,6 +354,18 @@ router.post(
       realtime().emitToUser(p.userId, "dm:message", shaped);
     }
     realtime().emitToRoom(conversationRoom(conversationId), "dm:message", shaped);
+
+    // Notify the other participant(s) (for the bell + background push).
+    await notifyMany(
+      parts.filter((p) => p.userId !== meId).map((p) => p.userId),
+      {
+        type: "message",
+        actorUserId: meId,
+        targetType: "conversation",
+        targetId: conversationId,
+        body: bodyText.slice(0, 140) || "Sent an attachment",
+      },
+    );
 
     res.status(201).json(shaped);
   },

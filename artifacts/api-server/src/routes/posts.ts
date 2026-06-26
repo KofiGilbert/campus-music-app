@@ -4,6 +4,7 @@ import { db, posts, tracks, postLikes, postShares } from "@workspace/db";
 import { optionalAuth, requireAuth, requireVerified } from "../middlewares/auth";
 import { shapePost, shapePosts } from "../lib/postShape";
 import { extractMentions, extractHashtags } from "../lib/mentions";
+import { notify } from "../lib/notify";
 
 const router: IRouter = Router();
 
@@ -138,7 +139,7 @@ router.post(
     const userId = req.userId!;
     const postId = req.params.id;
     const [post] = await db
-      .select({ id: posts.id })
+      .select({ id: posts.id, authorUserId: posts.authorUserId })
       .from(posts)
       .where(and(eq(posts.id, postId), isNull(posts.deletedAt)))
       .limit(1);
@@ -160,6 +161,13 @@ router.post(
     } else {
       await db.insert(postLikes).values({ postId, userId }).onConflictDoNothing();
       liked = true;
+      await notify({
+        userId: post.authorUserId,
+        type: "post_like",
+        actorUserId: userId,
+        targetType: "post",
+        targetId: postId,
+      });
     }
 
     const [{ c }] = await db.select({ c: count() }).from(postLikes).where(eq(postLikes.postId, postId));

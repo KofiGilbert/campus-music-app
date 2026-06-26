@@ -78,6 +78,13 @@
       "when": 1782506742177,
       "tag": "0010_live_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1782508032963,
+      "tag": "0011_notifications",
+      "breakpoints": true
     }
   ]
 }
