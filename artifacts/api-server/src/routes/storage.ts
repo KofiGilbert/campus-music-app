@@ -5,10 +5,8 @@ import {
   RequestUploadUrlResponse,
 } from "@workspace/api-zod";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
-import { verifyToken } from "./auth";
+import { requireAuth } from "../middlewares/auth";
 import { registerUpload } from "../lib/uploadRegistry";
-import { db, users } from "@workspace/db";
-import { eq } from "drizzle-orm";
 
 const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
@@ -21,20 +19,10 @@ const objectStorageService = new ObjectStorageService();
  * The client sends JSON metadata (name, size, contentType) — NOT the file.
  * Then uploads the file directly to the returned presigned URL.
  */
-router.post("/storage/uploads/request-url", async (req: Request, res: Response) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith("Bearer ")) {
-    res.status(401).json({ error: "Authentication required" });
-    return;
-  }
-  const userId = await verifyToken(authHeader.slice(7));
-  if (!userId) {
-    res.status(401).json({ error: "Invalid or expired token" });
-    return;
-  }
-
-  const [user] = await db.select({ role: users.role }).from(users).where(eq(users.id, userId)).limit(1);
-  if (!user || user.role !== "artist") {
+router.post("/storage/uploads/request-url", requireAuth, async (req: Request, res: Response) => {
+  const userId = req.userId!; // guaranteed by requireAuth
+  // Artist-only — token-side check, no DB round-trip (role is in the JWT claim).
+  if (req.auth!.role !== "artist") {
     res.status(403).json({ error: "Only artists can upload files" });
     return;
   }

@@ -61,6 +61,20 @@ git add -p          # stage intentionally
 git commit
 ```
 
+### Linting & formatting
+
+- **ESLint** runs on every PR and on `git commit` (Husky → lint-staged runs
+  `eslint --fix` on staged JS/TS). Run it yourself with `pnpm lint`
+  (`pnpm lint:fix` to auto-fix). The Phase 0 baseline is *errors-only*: genuine
+  bugs error, known debt (`exhaustive-deps`, `no-explicit-any`) warns
+  non-blockingly, stylistic rules are off. Errors must be zero to merge.
+- **Prettier** config + scripts (`pnpm format`, `pnpm format:check`) exist, but
+  **the codebase is not yet formatted and Prettier is not enforced**. Run
+  `pnpm format:check` to see drift. A future dedicated commit will run
+  `pnpm format` across the repo, add its SHA to `.git-blame-ignore-revs`, and
+  wire `prettier --write` into lint-staged + `format:check` into CI. Until then,
+  don't bulk-reformat — it buries real diffs.
+
 ## 3. Push
 
 ```bash

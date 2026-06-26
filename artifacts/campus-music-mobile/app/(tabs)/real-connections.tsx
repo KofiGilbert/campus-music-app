@@ -1,6 +1,5 @@
 import { Ionicons } from "@/components/icons";
 import * as Haptics from "expo-haptics";
-import { router } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import { Animated, FlatList, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";

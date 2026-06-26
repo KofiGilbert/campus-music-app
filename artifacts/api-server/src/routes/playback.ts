@@ -1,22 +1,12 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { db, userPlayback } from "@workspace/db";
-import { verifyToken } from "./auth";
+import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
 
-async function requireUserId(req: Parameters<Parameters<typeof router.get>[1]>[0]): Promise<string | null> {
-  const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith("Bearer ")) return null;
-  return verifyToken(authHeader.slice(7));
-}
-
-router.get("/playback", async (req, res): Promise<void> => {
-  const userId = await requireUserId(req);
-  if (!userId) {
-    res.status(401).json({ error: "Authentication required" });
-    return;
-  }
+router.get("/playback", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.userId!; // guaranteed by requireAuth
 
   const [row] = await db.select().from(userPlayback).where(eq(userPlayback.userId, userId)).limit(1);
   if (!row) {
@@ -27,12 +17,8 @@ router.get("/playback", async (req, res): Promise<void> => {
   res.json({ trackId: row.trackId, position: row.position });
 });
 
-router.post("/playback", async (req, res): Promise<void> => {
-  const userId = await requireUserId(req);
-  if (!userId) {
-    res.status(401).json({ error: "Authentication required" });
-    return;
-  }
+router.post("/playback", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.userId!; // guaranteed by requireAuth
 
   const { trackId, position } = req.body as { trackId?: unknown; position?: unknown };
 

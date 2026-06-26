@@ -1,7 +1,7 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import { eq, desc, and, sql, count, inArray } from "drizzle-orm";
 import { db, tracks, userLikes, userLibrary, userPlayback, users } from "@workspace/db";
-import { verifyToken } from "./auth";
+import { optionalAuth, requireAuth } from "../middlewares/auth";
 import { ObjectStorageService } from "../lib/objectStorage";
 import { verifyUploadOwner, consumeUploadRecord } from "../lib/uploadRegistry";
 
@@ -9,12 +9,6 @@ const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
 
 const STORAGE_OBJECT_PATH_PATTERN = /\/storage(\/objects\/.+)$/;
-
-async function getUserId(req: Parameters<Parameters<typeof router.get>[1]>[0]): Promise<string | null> {
-  const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith("Bearer ")) return null;
-  return verifyToken(authHeader.slice(7));
-}
 
 const COVER_COLORS = [
   "#e85d4a", "#3b82f6", "#8b5cf6", "#f59e0b", "#10b981",
@@ -43,25 +37,18 @@ async function getLikeCount(trackId: string): Promise<number> {
   return row?.cnt ?? 0;
 }
 
-router.post("/tracks", async (req, res): Promise<void> => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith("Bearer ")) {
-    res.status(401).json({ error: "Authentication required" });
-    return;
-  }
-  const userId = await verifyToken(authHeader.slice(7));
-  if (!userId) {
-    res.status(401).json({ error: "Invalid or expired token" });
+router.post("/tracks", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.userId!; // guaranteed by requireAuth
+  // Artist-only — token-side gate before the DB hit (role is in the JWT claim).
+  if (req.auth!.role !== "artist") {
+    res.status(403).json({ error: "Only artists can upload tracks" });
     return;
   }
 
+  // Still need the row for the denormalized artist name + university on the track.
   const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
   if (!user) {
     res.status(401).json({ error: "User not found" });
-    return;
-  }
-  if (user.role !== "artist") {
-    res.status(403).json({ error: "Only artists can upload tracks" });
     return;
   }
 
@@ -175,8 +162,8 @@ router.get("/tracks/most-liked", async (req, res): Promise<void> => {
   res.json(sorted);
 });
 
-router.get("/tracks/liked", async (req, res): Promise<void> => {
-  const userId = await getUserId(req);
+router.get("/tracks/liked", optionalAuth, async (req, res): Promise<void> => {
+  const userId = req.userId;
   if (!userId) {
     res.json([]);
     return;
@@ -188,8 +175,8 @@ router.get("/tracks/liked", async (req, res): Promise<void> => {
   res.json(rows.map((r) => r.trackId));
 });
 
-router.get("/tracks/library", async (req, res): Promise<void> => {
-  const userId = await getUserId(req);
+router.get("/tracks/library", optionalAuth, async (req, res): Promise<void> => {
+  const userId = req.userId;
   if (!userId) {
     res.json([]);
     return;
@@ -211,17 +198,8 @@ router.get("/tracks/:id", async (req, res): Promise<void> => {
   res.json({ ...track, likes });
 });
 
-router.patch("/tracks/:id", async (req, res): Promise<void> => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith("Bearer ")) {
-    res.status(401).json({ error: "Authentication required" });
-    return;
-  }
-  const userId = await verifyToken(authHeader.slice(7));
-  if (!userId) {
-    res.status(401).json({ error: "Invalid or expired token" });
-    return;
-  }
+router.patch("/tracks/:id", requireAuth, async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+  const userId = req.userId!; // guaranteed by requireAuth
 
   const [track] = await db.select().from(tracks).where(eq(tracks.id, req.params.id));
   if (!track) {
@@ -299,17 +277,8 @@ router.patch("/tracks/:id", async (req, res): Promise<void> => {
   res.json({ ...updated, likes });
 });
 
-router.delete("/tracks/:id", async (req, res): Promise<void> => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith("Bearer ")) {
-    res.status(401).json({ error: "Authentication required" });
-    return;
-  }
-  const userId = await verifyToken(authHeader.slice(7));
-  if (!userId) {
-    res.status(401).json({ error: "Invalid or expired token" });
-    return;
-  }
+router.delete("/tracks/:id", requireAuth, async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+  const userId = req.userId!; // guaranteed by requireAuth
 
   const [track] = await db.select().from(tracks).where(eq(tracks.id, req.params.id));
   if (!track) {
@@ -351,14 +320,14 @@ router.post("/tracks/:id/play", async (req, res): Promise<void> => {
   res.json({ trackId: track.id, playCount: updated.playCount });
 });
 
-router.post("/tracks/:id/like", async (req, res): Promise<void> => {
+router.post("/tracks/:id/like", optionalAuth, async (req: Request<{ id: string }>, res: Response): Promise<void> => {
   const [track] = await db.select().from(tracks).where(eq(tracks.id, req.params.id));
   if (!track) {
     res.status(404).json({ error: "Track not found" });
     return;
   }
 
-  const userId = await getUserId(req);
+  const userId = req.userId;
   const { liked } = req.body as { liked?: boolean };
 
   if (userId) {
@@ -391,16 +360,12 @@ router.post("/tracks/:id/like", async (req, res): Promise<void> => {
   res.json({ trackId: track.id, likes: isLiked ? likeCount + 1 : Math.max(0, likeCount - 1), liked: isLiked });
 });
 
-router.post("/tracks/:id/library", async (req, res): Promise<void> => {
+router.post("/tracks/:id/library", requireAuth, async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+  const userId = req.userId!; // guaranteed by requireAuth
+
   const [track] = await db.select().from(tracks).where(eq(tracks.id, req.params.id));
   if (!track) {
     res.status(404).json({ error: "Track not found" });
-    return;
-  }
-
-  const userId = await getUserId(req);
-  if (!userId) {
-    res.status(401).json({ error: "Authentication required" });
     return;
   }
 

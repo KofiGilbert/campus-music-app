@@ -5,12 +5,35 @@
   "scripts": {
     "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead\" >&2; exit 1 ;; esac'",
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
+    "test": "pnpm -r --if-present run test",
+    "admin:promote": "pnpm --filter @workspace/api-server run admin:promote",
+    "db:migrate": "pnpm --filter @workspace/db run migrate",
+    "db:generate": "pnpm --filter @workspace/db run generate",
     "typecheck:libs": "tsc --build",
-    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
+    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "prepare": "husky"
   },
   "private": true,
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx,mjs,cjs}": "eslint --fix --no-warn-ignored"
+  },
   "devDependencies": {
+    "@eslint/js": "^9",
+    "eslint": "^9",
+    "eslint-config-prettier": "^10",
+    "eslint-plugin-drizzle": "^0.2.3",
+    "eslint-plugin-react": "^7",
+    "eslint-plugin-react-hooks": "^5",
+    "eslint-plugin-react-native": "^5.0.0",
+    "globals": "^16",
+    "husky": "^9",
+    "lint-staged": "^16",
+    "prettier": "^3.8.1",
     "typescript": "~5.9.2",
-    "prettier": "^3.8.1"
+    "typescript-eslint": "^8"
   }
 }

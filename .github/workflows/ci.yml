@@ -1,0 +1,92 @@
+name: CI
+
+# Runs on every PR and on pushes to main. lint -> typecheck -> build run in the
+# `quality` job; the `test` job runs the vitest suite against a throwaway
+# Postgres service container (integration tests need a real DB).
+#
+# NOTE: `pnpm format:check` is intentionally NOT a gate yet — the codebase is
+# not Prettier-formatted (see CONTRIBUTING.md). It becomes a gate once the
+# dedicated bulk-format commit lands.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Cancel superseded runs for the same ref (e.g. rapid pushes to a PR branch).
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Skip husky hook installation during CI installs (no commits happen here).
+  HUSKY: "0"
+
+jobs:
+  quality:
+    name: Lint, typecheck & build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          # Floating 11.x (not pinned): an exact version makes action-setup use
+          # standalone mode, which doesn't set npm_config_user_agent and trips the
+          # root preinstall guard. esbuild's build script is allowed for 11.9.0+
+          # via `allowBuilds` in pnpm-workspace.yaml.
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Lint
+        run: pnpm lint
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Build api-server bundle
+        run: pnpm --filter @workspace/api-server run build
+
+  test:
+    name: Test (Postgres)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: campus_music_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/campus_music_test
+      # Enables the DB-backed integration tests (auth happy path). Without it,
+      # those describe blocks skip — which is what `pnpm test` does locally.
+      INTEGRATION: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          # Floating 11.x (not pinned): an exact version makes action-setup use
+          # standalone mode, which doesn't set npm_config_user_agent and trips the
+          # root preinstall guard. esbuild's build script is allowed for 11.9.0+
+          # via `allowBuilds` in pnpm-workspace.yaml.
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Apply migrations to the throwaway CI database
+        # Fresh DB: drizzle-orm migrate runs the 0000_init baseline (full
+        # from-scratch schema) and any later migrations from the versioned SQL.
+        # No bootstrap here — bootstrapping (marking 0000_init already-applied)
+        # is only for the existing prod DB (see lib/db/README.md).
+        run: pnpm db:migrate
+      - name: Run tests
+        run: pnpm --filter @workspace/api-server run test

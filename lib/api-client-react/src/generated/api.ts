@@ -24,7 +24,6 @@ import type {
   ConnectionUser,
   CreateTrackBody,
   ErrorResponse,
-  FeedLikeResponse,
   FollowBody,
   FollowResponse,
   GetConnectionsParams,
@@ -2110,93 +2109,6 @@ export function useGetFeed<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
-
-/**
- * @summary Like or unlike a feed item
- */
-export const getLikeFeedItemUrl = (id: string) => {
-  return `/api/feed/${id}/like`;
-};
-
-export const likeFeedItem = async (
-  id: string,
-  likeBody?: LikeBody,
-  options?: RequestInit,
-): Promise<FeedLikeResponse> => {
-  return customFetch<FeedLikeResponse>(getLikeFeedItemUrl(id), {
-    ...options,
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...options?.headers },
-    body: JSON.stringify(likeBody),
-  });
-};
-
-export const getLikeFeedItemMutationOptions = <
-  TError = ErrorType<ErrorResponse>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof likeFeedItem>>,
-    TError,
-    { id: string; data: BodyType<LikeBody> },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationOptions<
-  Awaited<ReturnType<typeof likeFeedItem>>,
-  TError,
-  { id: string; data: BodyType<LikeBody> },
-  TContext
-> => {
-  const mutationKey = ["likeFeedItem"];
-  const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      "mutationKey" in options.mutation &&
-      options.mutation.mutationKey
-      ? options
-      : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey }, request: undefined };
-
-  const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof likeFeedItem>>,
-    { id: string; data: BodyType<LikeBody> }
-  > = (props) => {
-    const { id, data } = props ?? {};
-
-    return likeFeedItem(id, data, requestOptions);
-  };
-
-  return { mutationFn, ...mutationOptions };
-};
-
-export type LikeFeedItemMutationResult = NonNullable<
-  Awaited<ReturnType<typeof likeFeedItem>>
->;
-export type LikeFeedItemMutationBody = BodyType<LikeBody>;
-export type LikeFeedItemMutationError = ErrorType<ErrorResponse>;
-
-/**
- * @summary Like or unlike a feed item
- */
-export const useLikeFeedItem = <
-  TError = ErrorType<ErrorResponse>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof likeFeedItem>>,
-    TError,
-    { id: string; data: BodyType<LikeBody> },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationResult<
-  Awaited<ReturnType<typeof likeFeedItem>>,
-  TError,
-  { id: string; data: BodyType<LikeBody> },
-  TContext
-> => {
-  return useMutation(getLikeFeedItemMutationOptions(options));
-};
 
 /**
  * @summary Search tracks and artists

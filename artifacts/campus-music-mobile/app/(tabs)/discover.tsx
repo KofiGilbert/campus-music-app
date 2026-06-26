@@ -29,7 +29,6 @@ import { MusicCard } from "@/components/MusicCard";
 import { NowPlayingBar } from "@/components/NowPlayingBar";
 import { SectionHeader } from "@/components/SectionHeader";
 import { GENRES, usePlayer } from "@/context/PlayerContext";
-import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 import { Track } from "@/components/MusicCard";
 
@@ -290,7 +289,6 @@ function TrendingRow({ track, rank, onPlay, isCurrent, isPlaying }: {
 export default function DiscoverScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { user } = useAuth();
   const { tracks, currentTrack, isPlaying, isLoading, playTrack, playNext, addToQueue, togglePlay, nextTrack, toggleLike, likedIds } = usePlayer();
 
   const [query, setQuery] = useState("");
@@ -339,7 +337,6 @@ export default function DiscoverScreen() {
   }, [tracks, likedIds, debouncedQuery, searchResults, selectedGenre]);
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
-  const displayName = user?.university ?? "Your Campus";
 
   const genreTracks = selectedGenre === "All"
     ? tracks
@@ -649,7 +646,6 @@ const ds = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.3)", borderRadius: 12, paddingHorizontal: 8, paddingVertical: 4,
   },
   heroPlayCountText: { color: "rgba(255,255,255,0.9)", fontSize: 12, fontWeight: "600" },
-  heroArtCenter: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center" },
   heroBottom: { flexDirection: "row", alignItems: "flex-end", padding: 18 },
   heroBadgeRow: { flexDirection: "row", marginBottom: 6 },
   heroBadge: { backgroundColor: "rgba(255,255,255,0.2)", borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
@@ -711,11 +707,6 @@ const ds = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 8, overflow: "hidden",
   },
-  countryFlagBadge: {
-    position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
-    alignItems: "center", justifyContent: "center",
-  },
-  countryFlag: { fontSize: 48, textAlign: "center" },
   countryStreamsTag: {
     position: "absolute", bottom: 7, right: 7,
     flexDirection: "row", alignItems: "center", gap: 3,

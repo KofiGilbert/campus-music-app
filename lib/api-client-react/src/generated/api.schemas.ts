@@ -77,12 +77,6 @@ export interface LibraryResponse {
   saved: boolean;
 }
 
-export interface FeedLikeResponse {
-  itemId: string;
-  likes: number;
-  liked: boolean;
-}
-
 export interface FollowBody {
   following?: boolean;
 }

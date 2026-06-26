@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, count, inArray } from "drizzle-orm";
-import { db, users, artists, tracks, userLikes } from "@workspace/db";
+import { db, users, tracks, userLikes } from "@workspace/db";
 
 const router: IRouter = Router();
 
@@ -28,53 +28,15 @@ async function getLikeCounts(trackIds: string[]): Promise<Map<string, number>> {
 }
 
 router.get("/users/:id", async (req, res): Promise<void> => {
-  const rawId = req.params.id;
-
-  if (rawId.startsWith("user-")) {
-    const artistId = rawId.slice(5);
-    const [artist] = await db.select().from(artists).where(eq(artists.id, artistId)).limit(1);
-    if (!artist) {
-      res.status(404).json({ error: "User not found" });
-      return;
-    }
-
-    const artistTracks = await db.select().from(tracks).where(eq(tracks.artistId, artistId));
-    const trackIds = artistTracks.map((t) => t.id);
-    const likeCounts = await getLikeCounts(trackIds);
-
-    res.json({
-      id: rawId,
-      name: artist.name,
-      university: artist.university ?? "Unknown University",
-      role: "artist",
-      coverColor: artist.coverColor,
-      bio: artist.bio ?? null,
-      tracks: artistTracks.map((t) => ({
-        id: t.id,
-        title: t.title,
-        artist: artist.name,
-        artistId: t.artistId,
-        genre: t.genre,
-        duration: t.duration,
-        durationSeconds: t.durationSeconds,
-        coverColor: t.coverColor,
-        audioUrl: t.audioUrl ?? null,
-        coverUrl: t.coverUrl ?? null,
-        playCount: t.playCount,
-        likes: likeCounts.get(t.id) ?? 0,
-        university: artist.university ?? null,
-      })),
-    });
-    return;
-  }
-
-  const [user] = await db.select().from(users).where(eq(users.id, rawId)).limit(1);
+  // Artists are ordinary users now (role=artist), so there's a single lookup
+  // path — the former `user-<artistId>` virtual-ID branch is gone.
+  const [user] = await db.select().from(users).where(eq(users.id, req.params.id)).limit(1);
   if (!user) {
     res.status(404).json({ error: "User not found" });
     return;
   }
 
-  let userTracks: typeof tracks.$inferSelect[] = [];
+  let userTracks: (typeof tracks.$inferSelect)[] = [];
   if (user.role === "artist") {
     userTracks = await db.select().from(tracks).where(eq(tracks.artistId, user.id));
   }
@@ -86,8 +48,9 @@ router.get("/users/:id", async (req, res): Promise<void> => {
     name: user.name,
     university: user.university ?? "Unknown University",
     role: user.role,
-    coverColor: colorForIndex(user.id),
-    bio: null,
+    // Real cover color when the (artist) user has one; deterministic fallback otherwise.
+    coverColor: user.coverColor ?? colorForIndex(user.id),
+    bio: user.bio || null,
     tracks: userTracks.map((t) => ({
       id: t.id,
       title: t.title,
