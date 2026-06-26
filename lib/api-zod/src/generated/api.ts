@@ -1169,6 +1169,103 @@ export const SendLiveChatBody = zod.object({
 });
 
 /**
+ * @summary Cursor-paginated notification inbox
+ */
+export const GetNotificationsQueryParams = zod.object({
+  limit: zod.coerce.number().optional(),
+  cursor: zod.coerce.string().optional(),
+});
+
+export const GetNotificationsResponse = zod.object({
+  items: zod.array(
+    zod.object({
+      id: zod.string(),
+      type: zod.string(),
+      actor: zod
+        .union([
+          zod.object({
+            id: zod.string(),
+            username: zod.string(),
+            name: zod.string(),
+            avatarUrl: zod.string().nullish(),
+            role: zod.string(),
+          }),
+          zod.null(),
+        ])
+        .optional(),
+      targetType: zod.string().nullish(),
+      targetId: zod.string().nullish(),
+      body: zod.string().nullish(),
+      readAt: zod.string().nullish(),
+      createdAt: zod.string(),
+    }),
+  ),
+  nextCursor: zod.string().nullable(),
+});
+
+/**
+ * @summary Unread notification count (bell badge)
+ */
+export const GetUnreadCountResponse = zod.object({
+  count: zod.number(),
+});
+
+/**
+ * @summary Mark one notification read
+ */
+export const MarkNotificationReadParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const MarkNotificationReadResponse = zod.object({
+  ok: zod.boolean(),
+});
+
+/**
+ * @summary Mark all notifications read
+ */
+export const MarkAllNotificationsReadResponse = zod.object({
+  ok: zod.boolean(),
+});
+
+/**
+ * @summary Per-type notification preferences
+ */
+export const GetNotificationPrefsResponse = zod.object({
+  prefs: zod.record(zod.string(), zod.boolean()),
+});
+
+/**
+ * @summary Merge per-type notification toggles
+ */
+export const UpdateNotificationPrefsBody = zod.object({
+  prefs: zod.record(zod.string(), zod.boolean()),
+});
+
+export const UpdateNotificationPrefsResponse = zod.object({
+  prefs: zod.record(zod.string(), zod.boolean()),
+});
+
+/**
+ * @summary Register a device push token
+ */
+export const RegisterPushTokenBody = zod.object({
+  token: zod.string(),
+  platform: zod.string().optional(),
+});
+
+/**
+ * @summary Unregister a device push token
+ */
+export const UnregisterPushTokenBody = zod.object({
+  token: zod.string(),
+});
+
+export const UnregisterPushTokenResponse = zod.object({
+  ok: zod.boolean(),
+});
+
+/**
  * @summary Search tracks and artists
  */
 export const SearchQueryParams = zod.object({
