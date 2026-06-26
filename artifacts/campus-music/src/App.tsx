@@ -5,15 +5,38 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 
-import { SplashScreen } from "@/pages/SplashScreen";
+import { AdminLayout } from "@/components/AdminLayout";
+import { Login } from "@/pages/Login";
+import { Dashboard } from "@/pages/Dashboard";
+import { Users } from "@/pages/Users";
+import { Flags } from "@/pages/Flags";
+import { Moderation } from "@/pages/Moderation";
+import { Tracks } from "@/pages/Tracks";
+import { Live } from "@/pages/Live";
+import { Broadcast } from "@/pages/Broadcast";
+
+function AdminRoutes() {
+  return (
+    <AdminLayout>
+      <Switch>
+        <Route path="/" component={Dashboard} />
+        <Route path="/users" component={Users} />
+        <Route path="/flags" component={Flags} />
+        <Route path="/moderation" component={Moderation} />
+        <Route path="/tracks" component={Tracks} />
+        <Route path="/live" component={Live} />
+        <Route path="/broadcast" component={Broadcast} />
+        <Route component={NotFound} />
+      </Switch>
+    </AdminLayout>
+  );
+}
 
 function Router() {
   return (
     <Switch>
-      {/* Add pages below */}
-      <Route path="/" component={SplashScreen} />
-      {/* Fallback to 404 */}
-      <Route component={NotFound} />
+      <Route path="/login" component={Login} />
+      <Route component={AdminRoutes} />
     </Switch>
   );
 }
