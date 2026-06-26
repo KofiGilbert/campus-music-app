@@ -3,9 +3,10 @@ import { Audio } from "expo-av";
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { AppState, AppStateStatus, Platform } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { getTracks, getLikedTrackIds, getLibraryTrackIds, likeTrack, saveToLibrary, getPlaybackState, savePlaybackState, recordPlay } from "@workspace/api-client-react";
+import { getTracks, getLikedTrackIds, getLibraryTrackIds, likeTrack, saveToLibrary, getPlaybackState, savePlaybackState, recordPlay, recordSkip } from "@workspace/api-client-react";
 import { Track } from "@/components/MusicCard";
 import { useAuth } from "@/context/AuthContext";
+import { useBitrate } from "@/hooks/useBitrate";
 import { FrequencyAnalyzer, FrequencyBands } from "@/utils/frequencyAnalyzer";
 
 const log = (...args: unknown[]) => {
@@ -168,6 +169,13 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   // Whether a play has already been recorded for the current track load.
   // Reset to false each time a new track begins loading so we never double-count.
   const playRecordedRef = useRef(false);
+  // Connection-appropriate audio bitrate, kept in a ref so playTrackInternal reads
+  // the latest without re-creating the callback.
+  const bitrate = useBitrate("auto");
+  const bitrateRef = useRef(bitrate);
+  useEffect(() => {
+    bitrateRef.current = bitrate;
+  }, [bitrate]);
   // Accumulated seconds the user has actively listened (isPlaying ticks) for the
   // current track load. Incremented by the delta between consecutive status-update
   // callbacks while isPlaying is true. Reset on each new track load.
@@ -719,6 +727,21 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       const startPositionSecs = restored && restored.trackId === track.id ? restored.position : 0;
       restoredPositionRef.current = null;
 
+      // Record a skip if the previous track was advanced before its play was
+      // counted and before 30s of listening.
+      const outgoing = currentTrackRef.current;
+      if (
+        outgoing &&
+        outgoing.id !== track.id &&
+        !playRecordedRef.current &&
+        accumulatedListeningSecsRef.current > 0 &&
+        accumulatedListeningSecsRef.current < 30
+      ) {
+        recordSkip(outgoing.id, {
+          secondsBeforeSkip: Math.round(accumulatedListeningSecsRef.current),
+        }).catch(() => {});
+      }
+
       // Reset play-count tracking so each new track load starts fresh.
       playRecordedRef.current = false;
       accumulatedListeningSecsRef.current = 0;
@@ -729,7 +752,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       setProgress(startPositionSecs);
       setDuration(0);
 
-      const audioUrl = track.audioUrl;
+      // Prefer the connection-appropriate transcoded variant; fall back to the
+      // single audioUrl (legacy / pre-transcode tracks).
+      const audioUrl = track.audioUrls?.[bitrateRef.current] ?? track.audioUrl;
       if (!audioUrl) {
         log("No audioUrl for track:", track.id);
         setIsPlaying(false);
@@ -883,7 +908,12 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
               log("Play threshold reached for track:", trackId, "(accumulated:", accumulated.toFixed(1), "s, dur:", durationSecs, "s)");
               // Increment the play count only after the server confirms the play,
               // then invalidate tracks so the authoritative server value takes over.
-              recordPlay(trackId).then(() => {
+              const completed = durationSecs > 0 && accumulated >= durationSecs * 0.9;
+              recordPlay(trackId, {
+                secondsListened: Math.round(accumulated),
+                completed,
+                source: "library",
+              }).then(() => {
                 setPlayCountDeltas((prev) => ({
                   ...prev,
                   [trackId]: (prev[trackId] ?? 0) + 1,

@@ -27,6 +27,9 @@ export interface Track {
   liked: boolean;
   audioUrl?: string | null;
   coverUrl?: string | null;
+  audioUrls?: Record<string, string> | null;
+  coverUrls?: Record<string, string> | null;
+  processingStatus?: string;
   durationSeconds?: number;
   university?: string | null;
   playCount?: number;
