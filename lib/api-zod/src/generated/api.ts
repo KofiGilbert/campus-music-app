@@ -1438,6 +1438,172 @@ export const GetForYouResponse = zod.object({
 });
 
 /**
+ * @summary Create a podcast series (artist only)
+ */
+export const CreatePodcastBody = zod.object({
+  title: zod.string(),
+  description: zod.string().optional(),
+  coverKey: zod.string().optional(),
+  university: zod.string().optional(),
+});
+
+/**
+ * @summary List podcasts (optionally filtered by university)
+ */
+export const GetPodcastsQueryParams = zod.object({
+  university: zod.coerce.string().optional(),
+});
+
+export const GetPodcastsResponse = zod.object({
+  items: zod.array(
+    zod.object({
+      id: zod.string(),
+      host: zod
+        .union([
+          zod.object({
+            id: zod.string(),
+            username: zod.string(),
+            name: zod.string(),
+            avatarUrl: zod.string().nullish(),
+            role: zod.string(),
+          }),
+          zod.null(),
+        ])
+        .optional(),
+      title: zod.string(),
+      description: zod.string(),
+      coverUrl: zod.string().nullish(),
+      university: zod.string().nullish(),
+      episodeCount: zod.number(),
+      subscriberCount: zod.number(),
+      isSubscribed: zod.boolean().nullish(),
+      createdAt: zod.string(),
+    }),
+  ),
+});
+
+/**
+ * @summary Podcasts the current user is subscribed to
+ */
+export const GetSubscribedPodcastsResponse = zod.object({
+  items: zod.array(
+    zod.object({
+      id: zod.string(),
+      host: zod
+        .union([
+          zod.object({
+            id: zod.string(),
+            username: zod.string(),
+            name: zod.string(),
+            avatarUrl: zod.string().nullish(),
+            role: zod.string(),
+          }),
+          zod.null(),
+        ])
+        .optional(),
+      title: zod.string(),
+      description: zod.string(),
+      coverUrl: zod.string().nullish(),
+      university: zod.string().nullish(),
+      episodeCount: zod.number(),
+      subscriberCount: zod.number(),
+      isSubscribed: zod.boolean().nullish(),
+      createdAt: zod.string(),
+    }),
+  ),
+});
+
+/**
+ * @summary Get a podcast series
+ */
+export const GetPodcastParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetPodcastResponse = zod.object({
+  id: zod.string(),
+  host: zod
+    .union([
+      zod.object({
+        id: zod.string(),
+        username: zod.string(),
+        name: zod.string(),
+        avatarUrl: zod.string().nullish(),
+        role: zod.string(),
+      }),
+      zod.null(),
+    ])
+    .optional(),
+  title: zod.string(),
+  description: zod.string(),
+  coverUrl: zod.string().nullish(),
+  university: zod.string().nullish(),
+  episodeCount: zod.number(),
+  subscriberCount: zod.number(),
+  isSubscribed: zod.boolean().nullish(),
+  createdAt: zod.string(),
+});
+
+/**
+ * @summary Delete a podcast (host only)
+ */
+export const DeletePodcastParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+/**
+ * @summary Cursor-paginated episodes
+ */
+export const GetPodcastEpisodesParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetPodcastEpisodesQueryParams = zod.object({
+  cursor: zod.coerce.string().optional(),
+});
+
+export const GetPodcastEpisodesResponse = zod.object({
+  items: zod.array(
+    zod.object({
+      id: zod.string(),
+      podcastId: zod.string(),
+      title: zod.string(),
+      description: zod.string(),
+      audioUrl: zod.string().nullish(),
+      durationSeconds: zod.number().nullish(),
+      publishedAt: zod.string(),
+    }),
+  ),
+  nextCursor: zod.string().nullable(),
+});
+
+/**
+ * @summary Publish an episode (host only)
+ */
+export const CreatePodcastEpisodeParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const CreatePodcastEpisodeBody = zod.object({
+  title: zod.string(),
+  description: zod.string().optional(),
+  audioKey: zod.string(),
+  durationSeconds: zod.number().optional(),
+});
+
+/**
+ * @summary Subscribe / unsubscribe (toggle)
+ */
+export const TogglePodcastSubscriptionParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const TogglePodcastSubscriptionResponse = zod.object({
+  subscribed: zod.boolean(),
+  subscriberCount: zod.number(),
+});
+
+/**
  * @summary List all known universities
  */
 export const GetUniversitiesResponseItem = zod.string();

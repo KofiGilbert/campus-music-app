@@ -1680,6 +1680,167 @@ paths:
               schema:
                 $ref: "#/components/schemas/ForYouResponse"
 
+  /podcasts:
+    post:
+      operationId: createPodcast
+      tags: [podcasts]
+      summary: Create a podcast series (artist only)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePodcastBody"
+      responses:
+        "201":
+          description: Podcast
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Podcast"
+        "400":
+          description: Invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      operationId: getPodcasts
+      tags: [podcasts]
+      summary: List podcasts (optionally filtered by university)
+      parameters:
+        - in: query
+          name: university
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Podcasts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PodcastsResponse"
+
+  /podcasts/subscribed:
+    get:
+      operationId: getSubscribedPodcasts
+      tags: [podcasts]
+      summary: Podcasts the current user is subscribed to
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Podcasts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PodcastsResponse"
+
+  /podcasts/{id}:
+    get:
+      operationId: getPodcast
+      tags: [podcasts]
+      summary: Get a podcast series
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Podcast
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Podcast"
+    delete:
+      operationId: deletePodcast
+      tags: [podcasts]
+      summary: Delete a podcast (host only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "204":
+          description: Deleted
+
+  /podcasts/{id}/episodes:
+    get:
+      operationId: getPodcastEpisodes
+      tags: [podcasts]
+      summary: Cursor-paginated episodes
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+        - in: query
+          name: cursor
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Episodes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EpisodesResponse"
+    post:
+      operationId: createPodcastEpisode
+      tags: [podcasts]
+      summary: Publish an episode (host only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateEpisodeBody"
+      responses:
+        "201":
+          description: Episode
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PodcastEpisode"
+
+  /podcasts/{id}/subscribe:
+    post:
+      operationId: togglePodcastSubscription
+      tags: [podcasts]
+      summary: Subscribe / unsubscribe (toggle)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Subscription state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscribeResponse"
+
   /universities:
     get:
       operationId: getUniversities
@@ -3086,6 +3247,145 @@ components:
             $ref: "#/components/schemas/Track"
       required:
         - tracks
+
+    PodcastHost:
+      type: object
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        name:
+          type: string
+        avatarUrl:
+          type: ["string", "null"]
+        role:
+          type: string
+      required:
+        - id
+        - username
+        - name
+        - role
+
+    Podcast:
+      type: object
+      properties:
+        id:
+          type: string
+        host:
+          oneOf:
+            - $ref: "#/components/schemas/PodcastHost"
+            - type: "null"
+        title:
+          type: string
+        description:
+          type: string
+        coverUrl:
+          type: ["string", "null"]
+        university:
+          type: ["string", "null"]
+        episodeCount:
+          type: integer
+        subscriberCount:
+          type: integer
+        isSubscribed:
+          type: ["boolean", "null"]
+        createdAt:
+          type: string
+      required:
+        - id
+        - title
+        - description
+        - episodeCount
+        - subscriberCount
+        - createdAt
+
+    PodcastsResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Podcast"
+      required:
+        - items
+
+    PodcastEpisode:
+      type: object
+      properties:
+        id:
+          type: string
+        podcastId:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        audioUrl:
+          type: ["string", "null"]
+        durationSeconds:
+          type: ["integer", "null"]
+        publishedAt:
+          type: string
+      required:
+        - id
+        - podcastId
+        - title
+        - description
+        - publishedAt
+
+    EpisodesResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PodcastEpisode"
+        nextCursor:
+          type: ["string", "null"]
+      required:
+        - items
+        - nextCursor
+
+    CreatePodcastBody:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        coverKey:
+          type: string
+        university:
+          type: string
+      required:
+        - title
+
+    CreateEpisodeBody:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        audioKey:
+          type: string
+        durationSeconds:
+          type: integer
+      required:
+        - title
+        - audioKey
+
+    SubscribeResponse:
+      type: object
+      properties:
+        subscribed:
+          type: boolean
+        subscriberCount:
+          type: integer
+      required:
+        - subscribed
+        - subscriberCount
 
     PublicProfile:
       type: object

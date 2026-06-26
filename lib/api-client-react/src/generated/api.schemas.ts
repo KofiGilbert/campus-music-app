@@ -549,6 +549,72 @@ export interface ForYouResponse {
   tracks: Track[];
 }
 
+export interface PodcastHost {
+  id: string;
+  username: string;
+  name: string;
+  /** @nullable */
+  avatarUrl?: string | null;
+  role: string;
+}
+
+export interface Podcast {
+  id: string;
+  host?: PodcastHost | null;
+  title: string;
+  description: string;
+  /** @nullable */
+  coverUrl?: string | null;
+  /** @nullable */
+  university?: string | null;
+  episodeCount: number;
+  subscriberCount: number;
+  /** @nullable */
+  isSubscribed?: boolean | null;
+  createdAt: string;
+}
+
+export interface PodcastsResponse {
+  items: Podcast[];
+}
+
+export interface PodcastEpisode {
+  id: string;
+  podcastId: string;
+  title: string;
+  description: string;
+  /** @nullable */
+  audioUrl?: string | null;
+  /** @nullable */
+  durationSeconds?: number | null;
+  publishedAt: string;
+}
+
+export interface EpisodesResponse {
+  items: PodcastEpisode[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
+export interface CreatePodcastBody {
+  title: string;
+  description?: string;
+  coverKey?: string;
+  university?: string;
+}
+
+export interface CreateEpisodeBody {
+  title: string;
+  description?: string;
+  audioKey: string;
+  durationSeconds?: number;
+}
+
+export interface SubscribeResponse {
+  subscribed: boolean;
+  subscriberCount: number;
+}
+
 export type PublicProfileRole = (typeof PublicProfileRole)[keyof typeof PublicProfileRole];
 
 export const PublicProfileRole = {
@@ -873,6 +939,14 @@ export const GetTrendingByDimensionDimension = {
   country: "country",
   university: "university",
 } as const;
+
+export type GetPodcastsParams = {
+  university?: string;
+};
+
+export type GetPodcastEpisodesParams = {
+  cursor?: string;
+};
 
 export type SearchUniversitiesParams = {
   /**
