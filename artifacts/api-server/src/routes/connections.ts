@@ -2,6 +2,7 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { db, userConnections, users } from "@workspace/db";
 import { and, eq, ilike, inArray, ne, or } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
+import { notify } from "../lib/notify";
 
 const router: IRouter = Router();
 
@@ -351,6 +352,13 @@ router.post("/connections/:userId/respond", requireAuth, async (req: Request<{ u
           eq(userConnections.toUserId, userId)
         )
       );
+    await notify({
+      userId: requesterId,
+      type: "connection_accepted",
+      actorUserId: userId,
+      targetType: "user",
+      targetId: userId,
+    });
     res.json({ userId: requesterId, status: "connected" });
   } else {
     await db

@@ -2,6 +2,7 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { db, users, artistFollows } from "@workspace/db";
 import { and, eq, count, desc, lt } from "drizzle-orm";
 import { optionalAuth, requireAuth } from "../middlewares/auth";
+import { notify } from "../lib/notify";
 
 const router: IRouter = Router();
 
@@ -209,6 +210,13 @@ router.post("/artists/:id/follow", requireAuth, async (req: Request<{ id: string
 
   if (isFollowing && !wasFollowing) {
     await db.insert(artistFollows).values({ userId, artistId: artist.id });
+    await notify({
+      userId: artist.id,
+      type: "follow",
+      actorUserId: userId,
+      targetType: "user",
+      targetId: userId,
+    });
   } else if (!isFollowing && wasFollowing) {
     await db
       .delete(artistFollows)

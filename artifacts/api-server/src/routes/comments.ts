@@ -4,6 +4,7 @@ import { db, comments, posts, tracks, commentLikes } from "@workspace/db";
 import { optionalAuth, requireAuth, requireVerified } from "../middlewares/auth";
 import { shapeComment, shapeComments } from "../lib/commentShape";
 import { extractMentions, extractHashtags } from "../lib/mentions";
+import { notify } from "../lib/notify";
 
 const router: IRouter = Router();
 
@@ -101,6 +102,27 @@ router.post("/comments", requireAuth, requireVerified, async (req, res): Promise
     { commentId: comment.id, mentions: extractMentions(body), hashtags: extractHashtags(body) },
     "Comment created",
   );
+
+  // Notify the owner of the commented-on content.
+  let ownerId: string | null = null;
+  if (resolvedType === "post") {
+    const [p] = await db.select({ ownerId: posts.authorUserId }).from(posts).where(eq(posts.id, resolvedId)).limit(1);
+    ownerId = p?.ownerId ?? null;
+  } else if (resolvedType === "track") {
+    const [t] = await db.select({ ownerId: tracks.artistId }).from(tracks).where(eq(tracks.id, resolvedId)).limit(1);
+    ownerId = t?.ownerId ?? null;
+  }
+  if (ownerId) {
+    await notify({
+      userId: ownerId,
+      type: "comment",
+      actorUserId: userId,
+      targetType: resolvedType,
+      targetId: resolvedId,
+      body: body.trim().slice(0, 140),
+    });
+  }
+
   res.status(201).json(await shapeComment(comment, userId));
 });
 
