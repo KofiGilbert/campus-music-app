@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { inArray, count, eq } from "drizzle-orm";
 import { db, tracks, users, userLikes } from "@workspace/db";
+import { signTracksMedia } from "../lib/trackMedia";
 
 const router: IRouter = Router();
 
@@ -57,7 +58,7 @@ router.get("/search", async (req, res): Promise<void> => {
     .map((a) => ({ ...a, genre: a.genre ?? "", coverColor: a.coverColor ?? "" }));
 
   const tracksWithLikes = await addLikesToTracks(matchedTracks);
-  res.json({ tracks: tracksWithLikes, artists: matchedArtists });
+  res.json({ tracks: await signTracksMedia(tracksWithLikes), artists: matchedArtists });
 });
 
 export default router;

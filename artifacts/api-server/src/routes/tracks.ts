@@ -2,13 +2,9 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { eq, desc, and, sql, count, inArray } from "drizzle-orm";
 import { db, tracks, userLikes, userLibrary, userPlayback, users } from "@workspace/db";
 import { optionalAuth, requireAuth, requireVerified } from "../middlewares/auth";
-import { ObjectStorageService } from "../lib/objectStorage";
-import { verifyUploadOwner, consumeUploadRecord } from "../lib/uploadRegistry";
+import { signTrackMedia, signTracksMedia } from "../lib/trackMedia";
 
 const router: IRouter = Router();
-const objectStorageService = new ObjectStorageService();
-
-const STORAGE_OBJECT_PATH_PATTERN = /\/storage(\/objects\/.+)$/;
 
 const COVER_COLORS = [
   "#e85d4a", "#3b82f6", "#8b5cf6", "#f59e0b", "#10b981",
@@ -52,14 +48,21 @@ router.post("/tracks", requireAuth, requireVerified, async (req, res): Promise<v
     return;
   }
 
-  const { title, genre, audioUrl, coverUrl, duration, durationSeconds } = req.body as {
+  const body = req.body as {
     title?: unknown;
     genre?: unknown;
+    sourceKey?: unknown;
+    coverSourceKey?: unknown;
+    // Legacy aliases (full URL or key) accepted for backward compat.
     audioUrl?: unknown;
     coverUrl?: unknown;
     duration?: unknown;
     durationSeconds?: unknown;
   };
+  const { title, genre, duration, durationSeconds } = body;
+  const sourceKey = typeof body.sourceKey === "string" ? body.sourceKey : body.audioUrl;
+  const coverSourceKey =
+    typeof body.coverSourceKey === "string" ? body.coverSourceKey : body.coverUrl;
 
   if (typeof title !== "string" || !title.trim()) {
     res.status(400).json({ error: "Title is required" });
@@ -69,13 +72,16 @@ router.post("/tracks", requireAuth, requireVerified, async (req, res): Promise<v
     res.status(400).json({ error: "Genre is required" });
     return;
   }
-  if (typeof audioUrl !== "string" || !audioUrl.trim()) {
-    res.status(400).json({ error: "Audio URL is required" });
+  if (typeof sourceKey !== "string" || !sourceKey.trim()) {
+    res.status(400).json({ error: "sourceKey is required" });
     return;
   }
 
   const randomColor = COVER_COLORS[Math.floor(Math.random() * COVER_COLORS.length)];
 
+  // Store R2 object KEYS (not full URLs); resolved to signed URLs at read time.
+  // The transcoder will later replace audioUrl/coverUrl with the processed
+  // variant keys and populate audioUrls/coverUrls.
   const [track] = await db
     .insert(tracks)
     .values({
@@ -86,39 +92,15 @@ router.post("/tracks", requireAuth, requireVerified, async (req, res): Promise<v
       duration: typeof duration === "string" ? duration : "0:00",
       durationSeconds: typeof durationSeconds === "number" ? durationSeconds : 0,
       coverColor: randomColor,
-      audioUrl: audioUrl.trim(),
-      coverUrl: typeof coverUrl === "string" ? coverUrl : null,
+      audioUrl: sourceKey.trim(),
+      coverUrl: typeof coverSourceKey === "string" ? coverSourceKey : null,
       university: user.university ?? "",
     })
     .returning();
 
   req.log.info({ trackId: track.id, userId }, "Track created");
 
-  // If the cover URL points to our own object storage, mark it as publicly visible so the
-  // /storage/objects/* route will serve it. Cover art is always public — it's displayed to
-  // all users. We verify ownership via the upload registry (the objectPath must have been
-  // issued to this user by POST /storage/uploads/request-url) before changing visibility.
-  if (track.coverUrl) {
-    const storageMatch = track.coverUrl.match(STORAGE_OBJECT_PATH_PATTERN);
-    if (storageMatch) {
-      const objectPath = storageMatch[1];
-      if (verifyUploadOwner(objectPath, userId)) {
-        try {
-          await objectStorageService.trySetObjectEntityAclPolicy(objectPath, {
-            owner: userId,
-            visibility: "public",
-          });
-          consumeUploadRecord(objectPath);
-        } catch (err) {
-          req.log.warn({ err, objectPath }, "Could not set public ACL on cover object");
-        }
-      } else {
-        req.log.warn({ objectPath, userId }, "Rejected attempt to publish unowned upload");
-      }
-    }
-  }
-
-  res.status(201).json({ ...track, likes: 0 });
+  res.status(201).json({ ...(await signTrackMedia(track)), likes: 0 });
 });
 
 router.get("/tracks", async (req, res): Promise<void> => {
@@ -135,7 +117,7 @@ router.get("/tracks", async (req, res): Promise<void> => {
   }
 
   const likeMap = await getLikeCountMap(rows.map((t) => t.id));
-  res.json(rows.map((t) => ({ ...t, likes: likeMap.get(t.id) ?? 0 })));
+  res.json(await signTracksMedia(rows.map((t) => ({ ...t, likes: likeMap.get(t.id) ?? 0 }))));
 });
 
 router.get("/tracks/trending", async (req, res): Promise<void> => {
@@ -144,7 +126,7 @@ router.get("/tracks/trending", async (req, res): Promise<void> => {
 
   const trending = await db.select().from(tracks).orderBy(desc(tracks.playCount)).limit(limit);
   const likeMap = await getLikeCountMap(trending.map((t) => t.id));
-  res.json(trending.map((t) => ({ ...t, likes: likeMap.get(t.id) ?? 0 })));
+  res.json(await signTracksMedia(trending.map((t) => ({ ...t, likes: likeMap.get(t.id) ?? 0 }))));
 });
 
 router.get("/tracks/most-liked", async (req, res): Promise<void> => {
@@ -159,7 +141,7 @@ router.get("/tracks/most-liked", async (req, res): Promise<void> => {
     .sort((a, b) => b.likes - a.likes || b.playCount - a.playCount)
     .slice(0, limit);
 
-  res.json(sorted);
+  res.json(await signTracksMedia(sorted));
 });
 
 router.get("/tracks/liked", optionalAuth, async (req, res): Promise<void> => {
@@ -195,7 +177,7 @@ router.get("/tracks/:id", async (req, res): Promise<void> => {
     return;
   }
   const likes = await getLikeCount(track.id);
-  res.json({ ...track, likes });
+  res.json({ ...(await signTrackMedia(track)), likes });
 });
 
 router.patch("/tracks/:id", requireAuth, async (req: Request<{ id: string }>, res: Response): Promise<void> => {
@@ -234,34 +216,17 @@ router.patch("/tracks/:id", requireAuth, async (req: Request<{ id: string }>, re
   const updates: Partial<typeof track> = {};
   if (typeof title === "string" && title.trim()) updates.title = title.trim();
   if (typeof genre === "string" && genre.trim()) updates.genre = genre.trim();
+  // coverUrl is now stored as an R2 key (or null); resolved to a signed URL at
+  // read time.
   if (coverUrl === null) {
     updates.coverUrl = null;
   } else if (typeof coverUrl === "string" && coverUrl.trim()) {
-    const newCoverUrl = coverUrl.trim();
-    updates.coverUrl = newCoverUrl;
-
-    const storageMatch = newCoverUrl.match(STORAGE_OBJECT_PATH_PATTERN);
-    if (storageMatch) {
-      const objectPath = storageMatch[1];
-      if (verifyUploadOwner(objectPath, userId)) {
-        try {
-          await objectStorageService.trySetObjectEntityAclPolicy(objectPath, {
-            owner: userId,
-            visibility: "public",
-          });
-          consumeUploadRecord(objectPath);
-        } catch (err) {
-          req.log.warn({ err, objectPath }, "Could not set public ACL on cover object during update");
-        }
-      } else {
-        req.log.warn({ objectPath, userId }, "Rejected attempt to publish unowned upload during track update");
-      }
-    }
+    updates.coverUrl = coverUrl.trim();
   }
 
   if (Object.keys(updates).length === 0) {
     const likes = await getLikeCount(track.id);
-    res.json({ ...track, likes });
+    res.json({ ...(await signTrackMedia(track)), likes });
     return;
   }
 
@@ -274,7 +239,7 @@ router.patch("/tracks/:id", requireAuth, async (req: Request<{ id: string }>, re
   req.log.info({ trackId: track.id, userId, updates: Object.keys(updates) }, "Track updated");
 
   const likes = await getLikeCount(updated.id);
-  res.json({ ...updated, likes });
+  res.json({ ...(await signTrackMedia(updated)), likes });
 });
 
 router.delete("/tracks/:id", requireAuth, async (req: Request<{ id: string }>, res: Response): Promise<void> => {

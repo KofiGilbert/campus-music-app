@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, count, inArray } from "drizzle-orm";
 import { db, users, tracks, userLikes } from "@workspace/db";
+import { signTracksMedia } from "../lib/trackMedia";
 
 const router: IRouter = Router();
 
@@ -43,15 +44,8 @@ router.get("/users/:id", async (req, res): Promise<void> => {
   const trackIds = userTracks.map((t) => t.id);
   const likeCounts = await getLikeCounts(trackIds);
 
-  res.json({
-    id: user.id,
-    name: user.name,
-    university: user.university ?? "Unknown University",
-    role: user.role,
-    // Real cover color when the (artist) user has one; deterministic fallback otherwise.
-    coverColor: user.coverColor ?? colorForIndex(user.id),
-    bio: user.bio || null,
-    tracks: userTracks.map((t) => ({
+  const shapedTracks = await signTracksMedia(
+    userTracks.map((t) => ({
       id: t.id,
       title: t.title,
       artist: user.name,
@@ -66,6 +60,17 @@ router.get("/users/:id", async (req, res): Promise<void> => {
       likes: likeCounts.get(t.id) ?? 0,
       university: user.university ?? null,
     })),
+  );
+
+  res.json({
+    id: user.id,
+    name: user.name,
+    university: user.university ?? "Unknown University",
+    role: user.role,
+    // Real cover color when the (artist) user has one; deterministic fallback otherwise.
+    coverColor: user.coverColor ?? colorForIndex(user.id),
+    bio: user.bio || null,
+    tracks: shapedTracks,
   });
 });
 
