@@ -3,6 +3,11 @@ import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { db, users } from "@workspace/db";
 import { signToken } from "../lib/jwt";
+import {
+  issueRefreshToken,
+  rotateRefreshToken,
+  revokeRefreshTokenFamily,
+} from "../lib/refreshTokens";
 import { requireAuth } from "../middlewares/auth";
 import { authLimiter } from "../middlewares/rateLimit";
 
@@ -87,15 +92,23 @@ async function registerUser(
     })
     .returning();
 
-  const token = await signToken({
+  const accessToken = await signToken({
     sub: newUser.id,
     role: newUser.role,
     isAdmin: newUser.isAdmin,
     isSystem: newUser.isSystem,
   });
+  const refreshToken = await issueRefreshToken(newUser.id);
   req.log.info({ userId: newUser.id }, "User registered");
 
-  res.status(201).json({ token, user: buildUserResponse(newUser) });
+  // `token` is a legacy alias for `accessToken` kept until the mobile client
+  // migrates to the access/refresh pair.
+  res.status(201).json({
+    token: accessToken,
+    accessToken,
+    refreshToken,
+    user: buildUserResponse(newUser),
+  });
 }
 
 router.post("/auth/register", authLimiter, async (req, res): Promise<void> => {
@@ -138,18 +151,68 @@ router.post("/auth/login", authLimiter, async (req, res): Promise<void> => {
     return;
   }
 
-  const token = await signToken({
+  const accessToken = await signToken({
     sub: user.id,
     role: user.role,
     isAdmin: user.isAdmin,
     isSystem: user.isSystem,
   });
+  const refreshToken = await issueRefreshToken(user.id);
   req.log.info({ userId: user.id }, "User logged in");
 
-  res.json({ token, user: buildUserResponse(user) });
+  res.json({
+    token: accessToken, // legacy alias, see registerUser
+    accessToken,
+    refreshToken,
+    user: buildUserResponse(user),
+  });
 });
 
-router.post("/auth/logout", (_req, res): void => {
+/**
+ * POST /auth/refresh — rotate a refresh token. Returns a fresh access token and
+ * a new refresh token (the old one is revoked). Not rate-limited: it's a
+ * high-frequency legitimate call already gated by possession of a 32-byte random
+ * token, and reuse detection handles theft. Access-token claims are re-read from
+ * the user's row, so role/admin changes propagate within one refresh.
+ */
+router.post("/auth/refresh", async (req, res): Promise<void> => {
+  const { refreshToken } = req.body as { refreshToken?: unknown };
+  if (typeof refreshToken !== "string" || !refreshToken) {
+    res.status(400).json({ error: "refreshToken is required" });
+    return;
+  }
+
+  const result = await rotateRefreshToken(refreshToken);
+  if (!result.ok) {
+    res.status(401).json({ error: "Invalid refresh token" });
+    return;
+  }
+
+  const [user] = await db.select().from(users).where(eq(users.id, result.userId)).limit(1);
+  if (!user) {
+    res.status(401).json({ error: "Invalid refresh token" });
+    return;
+  }
+
+  const accessToken = await signToken({
+    sub: user.id,
+    role: user.role,
+    isAdmin: user.isAdmin,
+    isSystem: user.isSystem,
+  });
+  res.json({ token: accessToken, accessToken, refreshToken: result.token });
+});
+
+/**
+ * POST /auth/logout — revokes the entire refresh-token family the presented
+ * token belongs to (signs the session out on this device). Idempotent: a missing
+ * or unknown token still returns success.
+ */
+router.post("/auth/logout", async (req, res): Promise<void> => {
+  const { refreshToken } = req.body as { refreshToken?: unknown };
+  if (typeof refreshToken === "string" && refreshToken) {
+    await revokeRefreshTokenFamily(refreshToken);
+  }
   res.json({ message: "Logged out successfully" });
 });
 

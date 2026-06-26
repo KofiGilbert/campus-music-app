@@ -20,7 +20,11 @@ function getJwtSecret(): Uint8Array {
 
 const JWT_SECRET = getJwtSecret();
 const JWT_ISSUER = "campus-music";
-const JWT_EXPIRY = "30d";
+// Short-lived access token. Long-lived sessions are carried by rotating refresh
+// tokens (lib/refreshTokens.ts), so a stale/leaked access token is only usable
+// for a few minutes. Revocation lag (e.g. after an admin/role change) is bounded
+// by this window.
+const JWT_EXPIRY = "15m";
 
 export interface AuthClaims {
   sub: string;

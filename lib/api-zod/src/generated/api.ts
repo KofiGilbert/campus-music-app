@@ -71,7 +71,9 @@ export const LoginBody = zod.object({
 });
 
 export const LoginResponse = zod.object({
-  token: zod.string(),
+  token: zod.string().describe("Legacy alias for accessToken; removed once clients migrate."),
+  accessToken: zod.string(),
+  refreshToken: zod.string(),
   user: zod.object({
     id: zod.string(),
     email: zod.string(),
@@ -84,8 +86,25 @@ export const LoginResponse = zod.object({
 });
 
 /**
- * @summary Logout
+ * @summary Rotate a refresh token for a new access + refresh token pair
  */
+export const RefreshBody = zod.object({
+  refreshToken: zod.string(),
+});
+
+export const RefreshResponse = zod.object({
+  token: zod.string().describe("Legacy alias for accessToken."),
+  accessToken: zod.string(),
+  refreshToken: zod.string(),
+});
+
+/**
+ * @summary Logout — revokes the presented refresh token's family
+ */
+export const LogoutBody = zod.object({
+  refreshToken: zod.string(),
+});
+
 export const LogoutResponse = zod.object({
   message: zod.string(),
 });

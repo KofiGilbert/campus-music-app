@@ -46,6 +46,8 @@ import type {
   PlaybackState,
   PlaybackStateBody,
   PublicProfile,
+  RefreshBody,
+  RefreshResponse,
   RegisterBody,
   RespondBody,
   RespondResponse,
@@ -524,16 +526,100 @@ export const useLogin = <TError = ErrorType<ErrorResponse>, TContext = unknown>(
 };
 
 /**
- * @summary Logout
+ * @summary Rotate a refresh token for a new access + refresh token pair
+ */
+export const getRefreshUrl = () => {
+  return `/api/auth/refresh`;
+};
+
+export const refresh = async (
+  refreshBody: RefreshBody,
+  options?: RequestInit,
+): Promise<RefreshResponse> => {
+  return customFetch<RefreshResponse>(getRefreshUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(refreshBody),
+  });
+};
+
+export const getRefreshMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof refresh>>,
+    TError,
+    { data: BodyType<RefreshBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof refresh>>,
+  TError,
+  { data: BodyType<RefreshBody> },
+  TContext
+> => {
+  const mutationKey = ["refresh"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof refresh>>,
+    { data: BodyType<RefreshBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return refresh(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RefreshMutationResult = NonNullable<Awaited<ReturnType<typeof refresh>>>;
+export type RefreshMutationBody = BodyType<RefreshBody>;
+export type RefreshMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Rotate a refresh token for a new access + refresh token pair
+ */
+export const useRefresh = <TError = ErrorType<ErrorResponse>, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof refresh>>,
+    TError,
+    { data: BodyType<RefreshBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof refresh>>,
+  TError,
+  { data: BodyType<RefreshBody> },
+  TContext
+> => {
+  return useMutation(getRefreshMutationOptions(options));
+};
+
+/**
+ * @summary Logout — revokes the presented refresh token's family
  */
 export const getLogoutUrl = () => {
   return `/api/auth/logout`;
 };
 
-export const logout = async (options?: RequestInit): Promise<LogoutResponse> => {
+export const logout = async (
+  refreshBody?: RefreshBody,
+  options?: RequestInit,
+): Promise<LogoutResponse> => {
   return customFetch<LogoutResponse>(getLogoutUrl(), {
     ...options,
     method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(refreshBody),
   });
 };
 
@@ -541,9 +627,19 @@ export const getLogoutMutationOptions = <
   TError = ErrorType<unknown>,
   TContext = unknown,
 >(options?: {
-  mutation?: UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError, void, TContext>;
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof logout>>,
+    TError,
+    { data: BodyType<RefreshBody> },
+    TContext
+  >;
   request?: SecondParameter<typeof customFetch>;
-}): UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError, void, TContext> => {
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof logout>>,
+  TError,
+  { data: BodyType<RefreshBody> },
+  TContext
+> => {
   const mutationKey = ["logout"];
   const { mutation: mutationOptions, request: requestOptions } = options
     ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
@@ -551,24 +647,39 @@ export const getLogoutMutationOptions = <
       : { ...options, mutation: { ...options.mutation, mutationKey } }
     : { mutation: { mutationKey }, request: undefined };
 
-  const mutationFn: MutationFunction<Awaited<ReturnType<typeof logout>>, void> = () => {
-    return logout(requestOptions);
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof logout>>,
+    { data: BodyType<RefreshBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return logout(data, requestOptions);
   };
 
   return { mutationFn, ...mutationOptions };
 };
 
 export type LogoutMutationResult = NonNullable<Awaited<ReturnType<typeof logout>>>;
-
+export type LogoutMutationBody = BodyType<RefreshBody>;
 export type LogoutMutationError = ErrorType<unknown>;
 
 /**
- * @summary Logout
+ * @summary Logout — revokes the presented refresh token's family
  */
 export const useLogout = <TError = ErrorType<unknown>, TContext = unknown>(options?: {
-  mutation?: UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError, void, TContext>;
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof logout>>,
+    TError,
+    { data: BodyType<RefreshBody> },
+    TContext
+  >;
   request?: SecondParameter<typeof customFetch>;
-}): UseMutationResult<Awaited<ReturnType<typeof logout>>, TError, void, TContext> => {
+}): UseMutationResult<
+  Awaited<ReturnType<typeof logout>>,
+  TError,
+  { data: BodyType<RefreshBody> },
+  TContext
+> => {
   return useMutation(getLogoutMutationOptions(options));
 };
 

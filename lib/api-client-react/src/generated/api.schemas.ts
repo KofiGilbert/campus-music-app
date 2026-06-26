@@ -48,8 +48,22 @@ export interface UserProfile {
 }
 
 export interface AuthResponse {
+  /** Legacy alias for accessToken; removed once clients migrate. */
   token: string;
+  accessToken: string;
+  refreshToken: string;
   user: UserProfile;
+}
+
+export interface RefreshBody {
+  refreshToken: string;
+}
+
+export interface RefreshResponse {
+  /** Legacy alias for accessToken. */
+  token: string;
+  accessToken: string;
+  refreshToken: string;
 }
 
 export interface LogoutResponse {

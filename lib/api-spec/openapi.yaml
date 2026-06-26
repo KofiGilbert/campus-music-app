@@ -185,11 +185,48 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /auth/refresh:
+    post:
+      operationId: refresh
+      tags: [auth]
+      summary: Rotate a refresh token for a new access + refresh token pair
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshBody"
+      responses:
+        "200":
+          description: Rotated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RefreshResponse"
+        "400":
+          description: Missing refresh token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Invalid, expired, or reused refresh token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /auth/logout:
     post:
       operationId: logout
       tags: [auth]
-      summary: Logout
+      summary: Logout — revokes the presented refresh token's family
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshBody"
       responses:
         "200":
           description: Logged out
@@ -1160,11 +1197,41 @@ components:
       properties:
         token:
           type: string
+          description: Legacy alias for accessToken; removed once clients migrate.
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
         user:
           $ref: "#/components/schemas/UserProfile"
       required:
         - token
+        - accessToken
+        - refreshToken
         - user
+
+    RefreshBody:
+      type: object
+      properties:
+        refreshToken:
+          type: string
+      required:
+        - refreshToken
+
+    RefreshResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: Legacy alias for accessToken.
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+      required:
+        - token
+        - accessToken
+        - refreshToken
 
     LogoutResponse:
       type: object
