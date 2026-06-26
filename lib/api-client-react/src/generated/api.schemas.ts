@@ -70,6 +70,23 @@ export interface LogoutResponse {
   message: string;
 }
 
+export interface ForgotPasswordBody {
+  email: string;
+}
+
+export interface ForgotPasswordResponse {
+  sent: boolean;
+}
+
+export interface ResetPasswordBody {
+  token: string;
+  newPassword: string;
+}
+
+export interface ResetPasswordResponse {
+  reset: boolean;
+}
+
 export interface LikeBody {
   liked?: boolean;
 }
