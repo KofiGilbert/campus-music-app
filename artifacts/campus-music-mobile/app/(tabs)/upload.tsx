@@ -135,7 +135,7 @@ export default function UploadScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const topPad = Platform.OS === "web" ? 67 : insets.top;
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const router = useRouter();
   const queryClient = useQueryClient();
 
@@ -329,6 +329,19 @@ export default function UploadScreen() {
         <Text style={[styles.emptyTitle, { color: colors.foreground }]}>Sign in to upload</Text>
         <Text style={[styles.emptySubtitle, { color: colors.mutedForeground }]}>
           You need an artist account to upload music.
+        </Text>
+      </View>
+    );
+  }
+
+  // Uploading is gated on a verified email (the server returns 403 otherwise).
+  if (user && !user.emailVerified) {
+    return (
+      <View style={[styles.container, styles.centered, { backgroundColor: colors.background }]}>
+        <Ionicons name="mail-unread-outline" size={64} color={colors.mutedForeground} />
+        <Text style={[styles.emptyTitle, { color: colors.foreground }]}>Verify your email</Text>
+        <Text style={[styles.emptySubtitle, { color: colors.mutedForeground }]}>
+          Verify {user.email} to upload music. Check your inbox for the verification code we sent.
         </Text>
       </View>
     );

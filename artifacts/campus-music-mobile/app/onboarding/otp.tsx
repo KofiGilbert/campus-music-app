@@ -3,8 +3,9 @@ import { router } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { sendOtp, verifyOtp } from "@workspace/api-client-react";
+import { sendOtp, verifyOtp, register } from "@workspace/api-client-react";
 import { useRegistration } from "@/context/RegistrationContext";
+import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 
 export default function OTPScreen() {
@@ -13,6 +14,7 @@ export default function OTPScreen() {
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 34 : insets.bottom;
   const { draft } = useRegistration();
+  const { user, signIn, updateUser } = useAuth();
   const email = draft.email ?? "";
 
   const [code, setCode] = useState(["", "", "", "", "", ""]);
@@ -53,9 +55,44 @@ export default function OTPScreen() {
     }
   };
 
-  // Send OTP when the screen mounts
+  // On mount, create the account (so OTP verification can mark THIS user's email
+  // verified) and sign in, then send the code. If we're already signed in (e.g.
+  // the screen remounted), skip registration. Guarded so it runs once per mount.
+  const bootstrapped = useRef(false);
   useEffect(() => {
-    requestOtp();
+    if (bootstrapped.current) return;
+    bootstrapped.current = true;
+    (async () => {
+      try {
+        if (!user) {
+          const { email: e, password, name, role, university, country } = draft;
+          if (!e || !password || !name || !role || !university || !country) {
+            Alert.alert("Missing info", "Please complete all sign-up steps.");
+            router.back();
+            return;
+          }
+          const result = await register({ email: e, password, name, role, university, country });
+          await signIn(
+            {
+              id: result.user.id,
+              name: result.user.name,
+              email: result.user.email,
+              role: result.user.role as "listener" | "artist",
+              university: result.user.university,
+              country: result.user.country,
+              avatarUrl: result.user.avatarUrl ?? null,
+              emailVerified: result.user.emailVerified,
+            },
+            result.accessToken,
+            result.refreshToken,
+          );
+        }
+        await requestOtp();
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : "Could not create your account.";
+        Alert.alert("Sign-up failed", msg);
+      }
+    })();
   }, []);
 
   const handleVerify = async () => {
@@ -63,6 +100,7 @@ export default function OTPScreen() {
     setIsVerifying(true);
     try {
       await verifyOtp({ email, code: code.join("") });
+      updateUser({ emailVerified: true });
       router.push("/onboarding/notifications");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Incorrect code. Please try again.";
