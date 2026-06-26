@@ -37,25 +37,30 @@ campus-music-app/
 ├── pnpm-workspace.yaml          # Workspace + catalog + Linux-only native overrides
 ├── .replit                      # Replit deployment + ports
 ├── RUNNING.md / TROUBLESHOOTING.md / CONTRIBUTING.md
-└── .github/pull_request_template.md  # Only GH artifact present — NO workflows
+├── .github/
+│   ├── pull_request_template.md
+│   └── workflows/ci.yml            # GitHub Actions: lint → typecheck → build → test (Postgres)
+├── .husky/pre-commit               # lint-staged on commit
+├── eslint.config.mjs               # Flat config: typescript-eslint + react/hooks + react-native + drizzle
+├── .prettierrc.json                 # Configured but NOT enforced (no format:check in CI yet)
+└── CONTRIBUTING.md                  # Contributor guide (Prettier rollout plan documented)
 ```
 
 **Tech stack:** Node 24, TypeScript 5.9, Drizzle 0.45, Express 5, React 19.1, Expo 54, React-Query, Tailwind v3/v4 (mixed), JWT via `jose`, bcryptjs, GCS via `@google-cloud/storage` + Replit sidecar.
 
 ### 1.2 Database Schema (`lib/db/src/schema/`)
 
-All tables live in a dedicated `campus_music` Postgres schema. Eight tables total, no SQL migration files on disk — only Drizzle `push` (the post-merge hook runs `pnpm --filter db push`).
+All tables live in a dedicated `campus_music` Postgres schema. Seven tables total (the `artists` table was collapsed into `users` in Phase 0). Versioned SQL migrations checked into `lib/db/migrations/`; the post-merge hook runs `pnpm db:migrate`.
 
 | Table | Cols | Purpose | Notes |
 |---|---|---|---|
-| `users` | id, username, password, email, name, role(`listener`\|`artist`), university, country, avatarUrl | Auth + profile | `username` is set to `email` on register; no `emailVerified`, no `createdAt/updatedAt`, no `bio`, no `pushToken` |
-| `tracks` | id, title, artist, artistId, genre, duration, durationSeconds, coverColor, audioUrl, coverUrl, playCount, university | Music catalog | Denormalized `artist` string + `artistId`; no `createdAt`, no `description`, no `releaseDate`, no `isPublished` |
-| `artists` | id, name, genre, university, coverColor, avatarUrl, bio | Artist profiles | **Separate from `users`** — seeded artists `a1`…`a10` have no matching user row; for real artists `artist.id === user.id` (informal contract enforced in `/artists/:id` PATCH) |
-| `user_likes` | (userId, trackId) PK | Track likes | |
+| `users` | id, username, password, email, name, role(`listener`\|`artist`), university, country, avatarUrl, bio, genre, coverColor, is_admin, is_system | Auth + profile + artist data | Artists collapsed into `users` (Phase 0 §3.5). `is_system` marks seed artists (sentinel password blocks login). `is_admin` baked into JWT claims. No `emailVerified`, no `createdAt/updatedAt` yet. |
+| `tracks` | id, title, artist, artistId, genre, duration, durationSeconds, coverColor, audioUrl, coverUrl, playCount, university, createdAt, updatedAt | Music catalog | FK `artistId → users(id)` ON DELETE CASCADE. Indexes on `artist_id`, `created_at DESC`. |
+| `user_likes` | (userId, trackId) PK, createdAt | Track likes | FKs to `users(id)` + `tracks(id)` ON DELETE CASCADE |
 | `user_library` | (userId, trackId) PK | Saved-to-library | |
-| `artist_follows` | (userId, artistId, createdAt) PK | Artist follows | Seeded with fake user IDs `seed_f_001…` to inflate follower counts |
-| `user_connections` | (fromUserId, toUserId) PK, status(`pending`\|`accepted`), createdAt | Friend graph | Supports virtual `user-<artistId>` IDs so artists can be "befriended" |
-| `user_playback` | userId PK, trackId, position, updatedAt | Cross-device resume | **Single row per user → no playback history** |
+| `artist_follows` | (userId, artistId, createdAt) PK | Artist follows | FKs to `users(id)` ON DELETE CASCADE |
+| `user_connections` | (fromUserId, toUserId) PK, status(`pending`\|`accepted`), createdAt, updatedAt | Friend graph | FKs to `users(id)` ON DELETE CASCADE |
+| `user_playback` | userId PK, trackId, position, updatedAt, createdAt | Cross-device resume | FKs to `users(id)` + `tracks(id)` ON DELETE CASCADE. **Single row per user → no playback history** |
 
 **What's missing from the schema for an MVP that ships every feature already shown in the UI:**
 
@@ -71,17 +76,17 @@ All tables live in a dedicated `campus_music` Postgres schema. Eight tables tota
 - ❌ `flags` / `reports` / `bans` for moderation + admin panel.
 - ❌ `email_verifications` / `password_resets` (OTP is in-memory).
 - ❌ `refresh_tokens` (JWT is 30-day, no refresh flow).
-- ❌ Foreign keys + indexes: schema has **zero `references()` and zero explicit indexes**. Joins work because columns happen to match. This is fine for prototype but unsafe for production (orphaned rows + slow queries).
-- ❌ `createdAt`/`updatedAt` on most tables.
-- ❌ Real SQL migration files (only `drizzle-kit push`, which is dev-grade).
+- ✅ ~~Foreign keys + indexes~~ — **Done (Phase 0).** 9 FK constraints with ON DELETE CASCADE + 3 indexes (`users(role)`, `tracks(artist_id)`, `tracks(created_at DESC)`).
+- ⚠️ `createdAt`/`updatedAt` — **Partially done (Phase 0).** Added to `tracks`, `user_likes`, `user_connections`, `user_playback`. Still missing on `users` and `user_library`.
+- ✅ ~~Real SQL migration files~~ — **Done (Phase 0).** `drizzle-kit generate` + checked-in SQL in `lib/db/migrations/`. `push` replaced by `migrate`.
 
 ### 1.3 API Server (`artifacts/api-server/src/routes/`)
 
-The server is the most "real" part of the codebase. CORS is wide-open, JWT is HS256/30d (no refresh), Pino logging is wired up.
+The server is the most "real" part of the codebase. CORS is now allow-listed (Phase 0). JWT is HS256/30d (no refresh), Pino logging is wired up.
 
 | Endpoint | Status | Notes |
 |---|---|---|
-| `GET /healthz` | ✅ | |
+| `GET /healthz` | ✅ | DB-ping health check added (Phase 0) |
 | `POST /auth/signup` / `/auth/register` | ✅ | bcrypt + JWT, no email verification gate |
 | `POST /auth/login` | ✅ | |
 | `POST /auth/logout` | ⚠️ | Returns `{message: "Logged out"}` — no server-side invalidation (stateless JWT) |
@@ -107,21 +112,21 @@ The server is the most "real" part of the codebase. CORS is wide-open, JWT is HS
 | `GET /storage/objects/:path` | ✅ | ACL-gated; supports public + private (owner-only) |
 | `GET/POST /playback` | ⚠️ | One row per user (`userId` is PK) → **no history**, only current position |
 
-**Server-level gaps:**
+**Server-level gaps (updated after Phase 0):**
 
-- ❌ No middleware for `requireAuth` — every route inlines the same `if (!authHeader.startsWith("Bearer ")) …` block.
-- ❌ No rate limiting (login, OTP, signup, search are all unthrottled).
+- ✅ ~~No `requireAuth` middleware~~ — **Done (Phase 0).** `requireAuth`, `optionalAuth`, `requireAdmin` middleware extracted to `lib/jwt`. Inline auth checks replaced across all routes.
+- ✅ ~~No rate limiting~~ — **Done (Phase 0).** Per-route `express-rate-limit` on auth endpoints (login, register, OTP). Per-route mounting (not router-level) to avoid firing on unrelated routes.
 - ❌ No input validation framework — most routes do ad-hoc `typeof x === "string"` checks instead of using `@workspace/api-zod`.
-- ❌ No central error handler / 4xx-5xx normalization.
+- ✅ ~~No central error handler~~ — **Done (Phase 0).** Central error handler + consistent `{code, message}` shape.
 - ❌ No request ID surfacing to clients.
-- ❌ No tests (`find … -name "*.test.*"` → 0 hits).
-- ❌ No CI (`.github/workflows/` does not exist; only a PR template).
-- ⚠️ `cors()` accepts all origins.
+- ✅ ~~No tests~~ — **Done (Phase 0).** JWT unit tests, auth middleware tests, auth integration tests (register→login→me→401). Vitest harness + healthz smoke test.
+- ✅ ~~No CI~~ — **Done (Phase 0).** GitHub Actions: lint → typecheck → build → test (with Postgres 16 service).
+- ✅ ~~CORS accepts all origins~~ — **Done (Phase 0).** CORS allow-listed.
 - ⚠️ `JWT_SECRET` falls back to a hardcoded dev string when unset in non-production.
 
 ### 1.4 Mobile App (`artifacts/campus-music-mobile/`)
 
-The entry point (`app/index.tsx`) is a one-liner: `<Redirect href="/(tabs)" />`. **There is no auth gate** — the entire app is browsable signed-out; specific screens just hide artist-only affordances when `!token`.
+The entry point (`app/index.tsx`) now checks for a stored token and redirects unauthenticated users to `/onboarding/welcome` (Phase 0 auth gate).
 
 **Tab navigation** (`app/(tabs)/_layout.tsx`):
 - Visible: Home, Discover, Library, Connect, Vibe (= Discover variant), Profile
@@ -151,7 +156,7 @@ The entry point (`app/index.tsx`) is a one-liner: `<Redirect href="/(tabs)" />`.
 
 **Mobile-level gaps:**
 
-- ❌ No auth gate — `app/index.tsx` redirects everyone into `(tabs)` regardless of token.
+- ✅ ~~No auth gate~~ — **Done (Phase 0).** `app/index.tsx` checks token, redirects to `/onboarding/welcome` if missing.
 - ❌ No push notification system (`expo-notifications` is not even installed).
 - ❌ No deep-link / share-sheet handling for tracks/profiles.
 - ❌ No analytics events (no Segment / Mixpanel / PostHog / Amplitude).
@@ -172,14 +177,14 @@ The entry point (`app/index.tsx`) is a one-liner: `<Redirect href="/(tabs)" />`.
 
 | Area | Status |
 |---|---|
-| Lint | ❌ No ESLint config anywhere |
-| Format | ⚠️ Prettier installed at root but no `.prettierrc` and no `format` script |
+| Lint | ✅ ESLint flat config: typescript-eslint + react/hooks + react-native + drizzle (Phase 0) |
+| Format | ✅ Prettier configured (`.prettierrc.json`), Husky pre-commit via lint-staged (Phase 0). `format:check` not yet in CI. |
 | Typecheck | ✅ `pnpm run typecheck` works (workspace `tsc --build`) |
-| Tests | ❌ Zero test files; no Vitest / Jest / Detox configured |
-| CI | ❌ No `.github/workflows/` |
-| Migrations | ⚠️ Only `drizzle-kit push` — no SQL migration history |
+| Tests | ✅ Vitest harness + JWT/auth/integration tests (Phase 0) |
+| CI | ✅ GitHub Actions: lint → typecheck → build → test with Postgres 16 service (Phase 0) |
+| Migrations | ✅ `drizzle-kit generate` + checked-in SQL migrations in `lib/db/migrations/` (Phase 0) |
 | Env | ⚠️ Per-artifact `.env` files (gitignored). API requires `DATABASE_URL`; mobile uses `EXPO_PUBLIC_API_URL` |
-| Deployment | ⚠️ `.replit` autoscale only — no Docker, no Fly/Vercel/Render config |
+| Deployment | ⚠️ `.replit` autoscale + Dockerfile added (Phase 0) — no Fly/Vercel deploy yet |
 | Secrets | ⚠️ JWT secret has insecure dev fallback; GCS auth flows through Replit sidecar (`127.0.0.1:1106`) which **does not exist outside Replit** |
 | Object storage | ⚠️ Works on Replit; needs replacement to deploy off-Replit |
 
@@ -196,12 +201,12 @@ The entry point (`app/index.tsx`) is a one-liner: `<Redirect href="/(tabs)" />`.
 | Email + password signup | ✅ | – | P0 | – |
 | Login | ✅ | – | P0 | – |
 | JWT issuance | ✅ | – | P0 | – |
-| **`requireAuth` middleware** (replace inline checks) | ❌ | S | P0 | – |
-| **Auth gate in mobile app** (redirect unauthenticated to onboarding/welcome) | ❌ | S | P0 | – |
+| ~~**`requireAuth` middleware**~~ | ✅ Done (Phase 0) | – | P0 | – |
+| ~~**Auth gate in mobile app**~~ | ✅ Done (Phase 0) | – | P0 | – |
 | **Refresh-token rotation** (short-lived access JWT + DB-backed refresh token) | ❌ | M | P0 | `refresh_tokens` table |
 | **Real email verification** (gate signup behind verified email; OTP currently in-memory + leaked in dev response) | ⚠️ | M | P0 | email provider (§3.1), `email_verifications` table |
 | **Password reset flow** (request + verify + reset) | ❌ | M | P0 | email provider |
-| **Rate limit auth endpoints** (login, signup, OTP send/verify) | ❌ | S | P0 | rate-limit lib (§3.8) |
+| ~~**Rate limit auth endpoints**~~ | ✅ Done (Phase 0) | – | P0 | – |
 | Role-based onboarding (artist vs listener branches) | ✅ | – | P0 | – |
 | **Logout that actually invalidates the refresh token** | ⚠️ | S | P0 | refresh tokens |
 | OAuth (Google / Apple sign-in) | ❌ | M | – | Post-MVP (§5) |
@@ -211,7 +216,7 @@ The entry point (`app/index.tsx`) is a one-liner: `<Redirect href="/(tabs)" />`.
 
 | Item | Status | Effort | Priority | Depends on |
 |---|---|---|---|---|
-| Bio (read + edit) | ⚠️ | S | P0 | Bio only exists on `artists` table, not `users`. Resolves with §3.5 |
+| Bio (read + edit) | ⚠️ | S | P0 | `bio` now on `users` (Phase 0 §3.5). Endpoint still needed. |
 | Avatar / cover photo upload | ⚠️ | M | P0 | Storage (§3.3). Today `users.avatarUrl` exists but there's no upload endpoint for it; only tracks get covers. |
 | Track uploads | ✅ | – | P0 | – |
 | **Multi-bitrate audio transcoding on upload** (AAC 96k / 160k / 320k) — Spotify-class playback | ❌ | M | P0 | Transcoding worker (§3.14) |
@@ -386,8 +391,8 @@ Repurpose `artifacts/campus-music` (the legacy Vite SPA, currently only a splash
 
 | Item | Status | Effort | Priority | Depends on |
 |---|---|---|---|---|
-| **Admin role on `users`** (`is_admin` boolean — keeps `role` clean for artist/listener) | ❌ | S | P0 | – |
-| **`requireAdmin` middleware** on protected admin routes | ❌ | S | P0 | – |
+| ~~**Admin role on `users`**~~ | ✅ Done (Phase 0) | – | P0 | `is_admin` boolean, baked into JWT |
+| ~~**`requireAdmin` middleware**~~ | ✅ Done (Phase 0) | – | P0 | – |
 | **Admin login** (reuse `/auth/login`, check `is_admin` claim) | ❌ | S | P0 | – |
 | **User list + ban/unban + search** | ❌ | M | P0 | – |
 | **Track list + takedown + search** | ❌ | M | P0 | – |
@@ -405,24 +410,24 @@ Repurpose `artifacts/campus-music` (the legacy Vite SPA, currently only a splash
 |---|---|---|---|---|
 | **Replace Replit GCS sidecar** with a portable storage backend (Supabase Storage recommended) | ⚠️ | M | P0 | §3.3 |
 | **Avatar upload endpoint** (`POST /users/me/avatar`) | ❌ | S | P0 | storage backend |
-| **Rate limiting** (`express-rate-limit` in-memory for MVP; Redis later) | ❌ | S | P0 | §3.8 |
+| ~~**Rate limiting**~~ | ✅ Done (Phase 0) | – | P0 | – |
 | **Central validation** with `@workspace/api-zod` everywhere | ⚠️ | M | P0 | – |
-| **Foreign keys + indexes** on every join column (`tracks.artistId`, `user_likes.trackId`, `artist_follows.artistId`, `user_connections.*UserId`, …) | ❌ | S | P0 | New migration |
-| **`createdAt` / `updatedAt`** on every table | ❌ | S | P0 | – |
-| **Real SQL migrations** (drizzle-kit `generate` checked in) — replace the `push`-everywhere flow | ⚠️ | S | P0 | – |
-| **Error normalization** — central error handler, consistent `{code, message}` shape | ❌ | S | P0 | – |
-| **CORS allow-list** (no more `cors()` open by default) | ⚠️ | S | P0 | – |
-| **Health checks** (`/healthz` exists but no DB ping) | ⚠️ | S | P0 | – |
+| ~~**Foreign keys + indexes**~~ | ✅ Done (Phase 0) | – | P0 | – |
+| **`createdAt` / `updatedAt`** on every table | ⚠️ Partial (Phase 0) | S | P0 | Added to tracks, user_likes, user_connections, user_playback. Missing on users, user_library. |
+| ~~**Real SQL migrations**~~ | ✅ Done (Phase 0) | – | P0 | – |
+| ~~**Error normalization**~~ | ✅ Done (Phase 0) | – | P0 | – |
+| ~~**CORS allow-list**~~ | ✅ Done (Phase 0) | – | P0 | – |
+| ~~**Health checks**~~ | ✅ Done (Phase 0) | – | P0 | – |
 | **WebSocket gateway** (`socket.io` on the Express server; auth via JWT in the handshake) — used by DMs + Live chat | ❌ | M | P0 | §3.7 |
-| **Tests** — integration tests for auth, tracks, posts, DMs, live session lifecycle | ❌ | L | P1 | – |
+| **Tests** — integration tests for auth, tracks, posts, DMs, live session lifecycle | ⚠️ Auth tests done (Phase 0); rest pending | L | P1 | – |
 
 ### 2.14 Infrastructure
 
 | Item | Status | Effort | Priority | Depends on |
 |---|---|---|---|---|
-| **CI workflow** (GitHub Actions: lint → typecheck → test on PR) | ❌ | S | P0 | – |
-| **ESLint config** (typescript-eslint + react-native plugin + drizzle plugin) | ❌ | S | P0 | – |
-| **Prettier config** (already installed, no rcfile) | ⚠️ | S | P0 | – |
+| ~~**CI workflow**~~ | ✅ Done (Phase 0) | – | P0 | – |
+| ~~**ESLint config**~~ | ✅ Done (Phase 0) | – | P0 | – |
+| ~~**Prettier config**~~ | ✅ Done (Phase 0) | – | P0 | – |
 | **Hosting decision** (Fly.io for API + Vercel for admin SPA — see §3.4) | ❌ | M | P0 | – |
 | **Production Postgres** (Supabase is already provisioned; verify connection limits + pgBouncer) | ⚠️ | S | P0 | – |
 | **Production object storage** (Supabase Storage — see §3.3) | ❌ | M | P0 | – |
@@ -506,11 +511,9 @@ Repurpose `artifacts/campus-music` (the legacy Vite SPA, currently only a splash
 - **Mobile** builds via Expo EAS (preview + production profiles).
 - **Action item:** add `Dockerfile` to `artifacts/api-server`, `fly.toml` w/ `auto_stop_machines = false` + `min_machines_running = 1` per region, and `vercel.json` to `artifacts/campus-music`.
 
-### 3.5 Artist data model: separate `artists` table or just a flag on `users`?
+### 3.5 Artist data model: separate `artists` table or just a flag on `users`? — DONE (Phase 0)
 
-- **Today:** Both exist. `users.role = "artist"` for real signups, **plus** a separate `artists` table for the 10 seeded artists `a1`…`a10` whose IDs are not user IDs. `tracks.artistId` and `artist_follows.artistId` can refer to either. The `/connections` route invents a `user-<artistId>` virtual ID to bridge them.
-- **Recommendation: collapse to a single source of truth.** Move all artist fields (`bio`, `genre`, `coverColor`) onto `users` and drop the `artists` table. Seeded `a1`…`a10` rows get re-created as real user rows (with `role=artist`, no password = "system" account, optionally email = `seed+a1@campus-music.app`). The virtual `user-<artistId>` hack across `/connections` and `/users/:id` disappears.
-- **Action item:** schema migration + reseed + update routes.
+- **Resolved:** `artists` table dropped. All artist fields (`bio`, `genre`, `coverColor`) moved onto `users`. Seeded `a1`…`a10` are now real `users` rows with `role=artist`, `is_system=true`, and a sentinel password (`!system-no-login`) that the login guard blocks before bcrypt. The virtual `user-<artistId>` hack is removed.
 
 ### 3.6 Live streaming — **two transports for two use cases**
 
@@ -535,24 +538,23 @@ Live audio and Campus Music TV are different products and need different transpo
 - **Wrap the RT layer in a `RealtimeGateway` interface** (`emitToUser`, `emitToRoom`, `joinRoom`, `leaveRoom`) so a future swap to Ably / Pusher / PartyKit is one adapter swap, not a rewrite.
 - **Action item:** add `socket.io` to `api-server`, expose at `/socket.io`, share `JWT_SECRET` for handshake verification.
 
-### 3.8 Rate limiting backend
+### 3.8 Rate limiting backend — STARTED (Phase 0)
 
-- **Options:** in-memory (`express-rate-limit`), Redis-backed (`rate-limit-redis`), Cloudflare.
-- **Recommendation:** in-memory for MVP (single-node), upgrade to Redis when we scale beyond one API instance. Put strict limits on auth + OTP + post creation + DM send.
+- **Done:** in-memory `express-rate-limit` on auth endpoints (login, register, OTP) with per-route mounting (Phase 0).
+- **Remaining:** extend to post creation, DM send, and other write endpoints in later phases. Upgrade to Redis when we scale beyond one API instance.
 
-### 3.9 Migrations strategy
+### 3.9 Migrations strategy — DONE (Phase 0)
 
-- **Today:** `drizzle-kit push` via post-merge hook. No SQL files checked in.
-- **Recommendation:** switch to `drizzle-kit generate` → check generated SQL into `lib/db/migrations/`. Apply via `drizzle-kit migrate` in CI/CD. Keep `push` for local dev only.
+- **Resolved:** Switched from `drizzle-kit push` to `drizzle-kit generate` + checked-in SQL migrations in `lib/db/migrations/`. Post-merge hook runs `pnpm db:migrate`. CI runs `migrate` against a fresh Postgres 16 service container. Baseline migration (`0000_init`) bootstraps from scratch; `0001_schema_hygiene` adds FKs, timestamps, and indexes.
 
 ### 3.10 Token strategy
 
 - **Today:** HS256 JWT, 30-day expiry, no refresh, no rotation, no server-side invalidation. Insecure dev fallback secret.
 - **Recommendation:** 15-min access token + 30-day refresh token stored in a new `refresh_tokens` table (hashed). Rotate refresh on every use. `/auth/logout` deletes the row. Required to make a real "log out" button work and to support revocation when an account is banned.
 
-### 3.11 Admin authorization
+### 3.11 Admin authorization — DONE (Phase 0)
 
-- **Recommendation:** add `users.is_admin` boolean (so an admin can also be an artist/listener). Bake `is_admin` into the JWT claims so middleware doesn't re-query.
+- **Resolved:** `users.is_admin` boolean added. `is_admin` baked into JWT claims (`{ sub, role, isAdmin, isSystem }`). `requireAdmin` middleware checks `req.auth.isAdmin === true`. Re-login required after admin flag changes.
 
 ### 3.12 Push notifications
 
@@ -653,14 +655,23 @@ Live audio and Campus Music TV are different products and need different transpo
 
 > Phase ordering is dependency-driven. Each phase is shippable on its own (mobile via Expo OTA / EAS preview, API via Fly preview deploy).
 
-### Phase 0 — Foundations (1 week)
+### Phase 0 — Foundations (1 week) — COMPLETE
 
-- ESLint + Prettier + GitHub Actions CI (lint, typecheck).
-- Add `requireAuth` middleware + replace inline auth checks across all routes.
-- Add auth gate in mobile app (`app/index.tsx` checks token, redirects to `/onboarding/welcome` if missing).
-- Add `createdAt`/`updatedAt` + foreign keys + indexes across existing tables. Switch to `drizzle-kit generate` + checked-in SQL migrations.
-- Collapse `artists` table into `users` (§3.5).
-- Central error handler + CORS allow-list + DB-ping health check.
+> **Merged:** PR #6 (21 commits, `chore/phase-0-foundations → main`). CI green.
+
+- ✅ ESLint flat config + Prettier + Husky pre-commit + lint-staged.
+- ✅ GitHub Actions CI: two-job pipeline (quality: lint→typecheck→build, test: vitest + Postgres 16).
+- ✅ `requireAuth` / `optionalAuth` / `requireAdmin` middleware extracted to `lib/jwt`; inline auth checks replaced across all routes.
+- ✅ Auth gate in mobile app (`app/index.tsx` checks token, redirects to `/onboarding/welcome`).
+- ✅ `createdAt`/`updatedAt` on tracks, user_likes, user_connections, user_playback. (Still missing on `users` and `user_library`.)
+- ✅ 9 FK constraints (ON DELETE CASCADE) + 3 indexes (`users(role)`, `tracks(artist_id)`, `tracks(created_at DESC)`).
+- ✅ Switched to `drizzle-kit generate` + checked-in SQL migrations (`0000_init` baseline + `0001_schema_hygiene`).
+- ✅ Collapsed `artists` table into `users` (§3.5). Seeded artists are now system users (`is_system`, sentinel password).
+- ✅ Central error handler + CORS allow-list + DB-ping health check.
+- ✅ `is_admin` / `is_system` flags on `users`, `requireAdmin` middleware, JWT claims baking (`sub`, `role`, `isAdmin`, `isSystem`).
+- ✅ Per-route rate limiting on auth endpoints (login, register, OTP).
+- ✅ JWT/auth unit tests + auth integration tests + Vitest harness.
+- ✅ Multi-stage Dockerfile for API server.
 
 **Effort:** ~5 dev-days. **Unblocks:** everything below.
 
@@ -670,8 +681,8 @@ Live audio and Campus Music TV are different products and need different transpo
 - Email provider integration (Resend) + real OTP send.
 - Email verification gate at signup (block protected actions until verified).
 - Password reset flow.
-- Rate limiting on auth endpoints.
-- `is_admin` flag in users + JWT claims.
+- ~~Rate limiting on auth endpoints.~~ (Moved to Phase 0 — done.)
+- ~~`is_admin` flag in users + JWT claims.~~ (Moved to Phase 0 — done.)
 
 **Effort:** ~5 dev-days.
 
@@ -891,9 +902,9 @@ Four core artist-side AI tools, all behind the `ai_credits` ledger.
 
 ### Phase summary
 
-| Phase | Theme | Effort |
-|---|---|---|
-| 0 | Foundations | 1 week |
+| Phase | Theme | Effort | Status |
+|---|---|---|---|
+| 0 | Foundations | 1 week | **COMPLETE** |
 | 1 | Real Auth | 1 week |
 | 2 | Profiles + Storage + Audio Pipeline + **AI Foundations** (R2 + CDN + transcoder + embeddings + stems + lyrics) | 2.5 weeks |
 | 3 | Music Feed + Social Graph (comments/likes/shares/reposts) | 2 weeks |
@@ -1004,4 +1015,4 @@ Things I deliberately did **not** put in the MVP because they require real user 
 
 ---
 
-*Once you approve this, I'll start at Phase 0 and ship one phase at a time, with a PR per phase. Soft-launch target: ~12 calendar weeks from kickoff (2 engineers, parallel where possible).*
+*Phase 0 shipped. Continuing one phase at a time, with a PR per phase. Soft-launch target: ~12 calendar weeks from kickoff (2 engineers, parallel where possible).*
