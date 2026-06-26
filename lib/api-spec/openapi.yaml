@@ -1610,7 +1610,7 @@ paths:
     get:
       operationId: search
       tags: [search]
-      summary: Search tracks and artists
+      summary: Faceted full-text search (tracks, artists, users, universities)
       parameters:
         - in: query
           name: q
@@ -1618,6 +1618,12 @@ paths:
             type: string
           required: true
           description: Search query
+        - in: query
+          name: type
+          schema:
+            type: string
+            enum: [all, tracks, artists, users, universities]
+          description: Facet to search (default all)
       responses:
         "200":
           description: Search results
@@ -1625,6 +1631,54 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SearchResults"
+
+  /discovery/now-listening:
+    get:
+      operationId: getNowListening
+      tags: [discovery]
+      summary: Users currently playing music (latest play in the last hour)
+      responses:
+        "200":
+          description: Now listening
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NowListeningResponse"
+
+  /discovery/trending:
+    get:
+      operationId: getTrendingByDimension
+      tags: [discovery]
+      summary: Trending tracks grouped by country or university (7-day window)
+      parameters:
+        - in: query
+          name: dimension
+          schema:
+            type: string
+            enum: [country, university]
+          description: Grouping dimension (default country)
+      responses:
+        "200":
+          description: Trending groups
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrendingGroupsResponse"
+
+  /discovery/for-you:
+    get:
+      operationId: getForYou
+      tags: [discovery]
+      summary: Personalized rail (connections' likes + same-university trending)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: For-you tracks
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ForYouResponse"
 
   /universities:
     get:
@@ -2926,6 +2980,27 @@ components:
         - followerCount
         - bio
 
+    SearchUser:
+      type: object
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        name:
+          type: string
+        avatarUrl:
+          type: ["string", "null"]
+        university:
+          type: ["string", "null"]
+        role:
+          type: string
+      required:
+        - id
+        - username
+        - name
+        - role
+
     SearchResults:
       type: object
       properties:
@@ -2937,9 +3012,80 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Artist"
+        users:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchUser"
+        universities:
+          type: array
+          items:
+            type: string
       required:
         - tracks
         - artists
+
+    NowListeningItem:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/SearchUser"
+        track:
+          $ref: "#/components/schemas/Track"
+        playedAt:
+          type: string
+      required:
+        - user
+        - track
+        - playedAt
+
+    NowListeningResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/NowListeningItem"
+      required:
+        - items
+
+    TrendingGroup:
+      type: object
+      properties:
+        key:
+          type: string
+        plays:
+          type: integer
+        tracks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Track"
+      required:
+        - key
+        - plays
+        - tracks
+
+    TrendingGroupsResponse:
+      type: object
+      properties:
+        dimension:
+          type: string
+        groups:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrendingGroup"
+      required:
+        - dimension
+        - groups
+
+    ForYouResponse:
+      type: object
+      properties:
+        tracks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Track"
+      required:
+        - tracks
 
     PublicProfile:
       type: object

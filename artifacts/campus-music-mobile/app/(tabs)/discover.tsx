@@ -24,7 +24,7 @@ import { resizeCoverUrl } from "@/utils/coverUrl";
 import { colorToBlurhash } from "@/utils/blurhash";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
-import { search as searchApi, useGetMostLikedTracks } from "@workspace/api-client-react";
+import { getForYou, search as searchApi, useGetMostLikedTracks } from "@workspace/api-client-react";
 import { MusicCard } from "@/components/MusicCard";
 import { NowPlayingBar } from "@/components/NowPlayingBar";
 import { SectionHeader } from "@/components/SectionHeader";
@@ -322,6 +322,21 @@ export default function DiscoverScreen() {
     likes: t.likes,
   }));
 
+  // Personalized "For You" rail (connections' likes + same-university trending).
+  const { data: forYouRaw } = useQuery({
+    queryKey: ["for-you"],
+    queryFn: () => getForYou(),
+    staleTime: 5 * 60 * 1000,
+  });
+  const forYouTracks: Track[] = (forYouRaw?.tracks ?? []).map((t) => ({
+    ...t,
+    liked: likedIds.has(t.id),
+    audioUrl: t.audioUrl ?? undefined,
+    coverUrl: t.coverUrl ?? undefined,
+    university: t.university ?? undefined,
+    likes: t.likes,
+  }));
+
   const isSearchActive = query.trim().length > 0;
 
   const filtered = useMemo(() => {
@@ -460,6 +475,36 @@ export default function DiscoverScreen() {
               />
             ))}
           </ScrollView>
+
+          {/* For You — personalized */}
+          {forYouTracks.length > 0 && (
+            <>
+              <SectionHeader title="For You" />
+              <ScrollView
+                horizontal showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingHorizontal: 16, gap: 12 }}
+                style={{ marginBottom: 28 }}
+              >
+                {forYouTracks.map((track, i) => (
+                  <Pressable key={track.id} style={ds.freshCard} onPress={() => handlePlay(track, forYouTracks)}>
+                    <ImageBackground
+                      source={{ uri: track.coverUrl ?? getAlbumArtUrl(track.genre, i + 1) }}
+                      style={[ds.freshArt, { backgroundColor: track.coverColor ?? "#1a1a1a" }]}
+                      imageStyle={{ borderRadius: 14 }}
+                      resizeMode="cover"
+                    >
+                      <LinearGradient colors={["transparent", "rgba(0,0,0,0.55)"]} style={StyleSheet.absoluteFill} />
+                      <View style={ds.freshPlayBtn}>
+                        <Ionicons name="play" size={18} color="#fff" style={{ marginLeft: 2 }} />
+                      </View>
+                    </ImageBackground>
+                    <Text style={[ds.freshTitle, { color: colors.foreground }]} numberOfLines={1}>{track.title}</Text>
+                    <Text style={[ds.freshArtist, { color: colors.mutedForeground }]} numberOfLines={1}>{track.artist}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </>
+          )}
 
           {/* Fresh Drops */}
           {freshDrops.length > 0 && (

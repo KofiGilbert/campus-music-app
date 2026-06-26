@@ -506,9 +506,47 @@ export interface Artist {
   following?: boolean;
 }
 
+export interface SearchUser {
+  id: string;
+  username: string;
+  name: string;
+  /** @nullable */
+  avatarUrl?: string | null;
+  /** @nullable */
+  university?: string | null;
+  role: string;
+}
+
 export interface SearchResults {
   tracks: Track[];
   artists: Artist[];
+  users?: SearchUser[];
+  universities?: string[];
+}
+
+export interface NowListeningItem {
+  user: SearchUser;
+  track: Track;
+  playedAt: string;
+}
+
+export interface NowListeningResponse {
+  items: NowListeningItem[];
+}
+
+export interface TrendingGroup {
+  key: string;
+  plays: number;
+  tracks: Track[];
+}
+
+export interface TrendingGroupsResponse {
+  dimension: string;
+  groups: TrendingGroup[];
+}
+
+export interface ForYouResponse {
+  tracks: Track[];
 }
 
 export type PublicProfileRole = (typeof PublicProfileRole)[keyof typeof PublicProfileRole];
@@ -805,7 +843,36 @@ export type SearchParams = {
    * Search query
    */
   q: string;
+  /**
+   * Facet to search (default all)
+   */
+  type?: SearchType;
 };
+
+export type SearchType = (typeof SearchType)[keyof typeof SearchType];
+
+export const SearchType = {
+  all: "all",
+  tracks: "tracks",
+  artists: "artists",
+  users: "users",
+  universities: "universities",
+} as const;
+
+export type GetTrendingByDimensionParams = {
+  /**
+   * Grouping dimension (default country)
+   */
+  dimension?: GetTrendingByDimensionDimension;
+};
+
+export type GetTrendingByDimensionDimension =
+  (typeof GetTrendingByDimensionDimension)[keyof typeof GetTrendingByDimensionDimension];
+
+export const GetTrendingByDimensionDimension = {
+  country: "country",
+  university: "university",
+} as const;
 
 export type SearchUniversitiesParams = {
   /**
