@@ -1,64 +1,53 @@
 import { Router, type IRouter } from "express";
-import { inArray, count, eq } from "drizzle-orm";
-import { db, tracks, users, userLikes } from "@workspace/db";
+import { count, inArray } from "drizzle-orm";
+import { db, userLikes } from "@workspace/db";
 import { signTracksMedia } from "../lib/trackMedia";
+import { searchProvider, type SearchFacet, type TrackRow } from "../lib/search";
 
 const router: IRouter = Router();
 
-async function addLikesToTracks<T extends { id: string }>(rows: T[]): Promise<(T & { likes: number })[]> {
+async function addLikesToTracks(rows: TrackRow[]): Promise<(TrackRow & { likes: number })[]> {
   if (rows.length === 0) return [];
   const likeRows = await db
     .select({ trackId: userLikes.trackId, cnt: count() })
     .from(userLikes)
-    .where(inArray(userLikes.trackId, rows.map((r) => r.id)))
+    .where(
+      inArray(
+        userLikes.trackId,
+        rows.map((r) => r.id),
+      ),
+    )
     .groupBy(userLikes.trackId);
   const likeMap = new Map(likeRows.map((r) => [r.trackId, r.cnt]));
   return rows.map((r) => ({ ...r, likes: likeMap.get(r.id) ?? 0 }));
 }
 
+function parseFacet(value: unknown): SearchFacet {
+  if (value === "tracks" || value === "artists" || value === "users" || value === "universities") return value;
+  return "all";
+}
+
+// GET /search?q=&type=all|tracks|artists|users|universities — faceted full-text
+// search. Response keeps `tracks` + `artists` (backward compatible) and adds
+// `users` + `universities`.
 router.get("/search", async (req, res): Promise<void> => {
-  const q = typeof req.query.q === "string" ? req.query.q.toLowerCase().trim() : "";
+  const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+  const facet = parseFacet(req.query.type);
 
   if (!q) {
-    res.json({ tracks: [], artists: [] });
+    res.json({ tracks: [], artists: [], users: [], universities: [] });
     return;
   }
 
-  const [allTracks, allArtists] = await Promise.all([
-    db.select().from(tracks),
-    db
-      .select({
-        id: users.id,
-        name: users.name,
-        genre: users.genre,
-        university: users.university,
-        coverColor: users.coverColor,
-        avatarUrl: users.avatarUrl,
-        bio: users.bio,
-      })
-      .from(users)
-      .where(eq(users.role, "artist")),
-  ]);
+  const results = await searchProvider.search(q, facet, 15);
+  const tracksWithLikes = await addLikesToTracks(results.tracks);
 
-  const matchedTracks = allTracks.filter(
-    (t) =>
-      t.title.toLowerCase().includes(q) ||
-      t.artist.toLowerCase().includes(q) ||
-      t.genre.toLowerCase().includes(q) ||
-      (t.university?.toLowerCase().includes(q) ?? false)
-  );
-
-  const matchedArtists = allArtists
-    .filter(
-      (a) =>
-        a.name.toLowerCase().includes(q) ||
-        (a.genre?.toLowerCase().includes(q) ?? false) ||
-        (a.university?.toLowerCase().includes(q) ?? false)
-    )
-    .map((a) => ({ ...a, genre: a.genre ?? "", coverColor: a.coverColor ?? "" }));
-
-  const tracksWithLikes = await addLikesToTracks(matchedTracks);
-  res.json({ tracks: await signTracksMedia(tracksWithLikes), artists: matchedArtists });
+  res.json({
+    tracks: await signTracksMedia(tracksWithLikes),
+    artists: results.artists,
+    users: results.users,
+    universities: results.universities,
+  });
 });
 
 export default router;

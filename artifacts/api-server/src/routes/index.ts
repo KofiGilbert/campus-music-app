@@ -17,6 +17,7 @@ import commentsRouter from "./comments";
 import messagesRouter from "./messages";
 import liveRouter from "./live";
 import notificationsRouter from "./notifications";
+import discoveryRouter from "./discovery";
 
 const router: IRouter = Router();
 
@@ -37,6 +38,7 @@ router.use(commentsRouter);
 router.use(messagesRouter);
 router.use(liveRouter);
 router.use(notificationsRouter);
+router.use(discoveryRouter);
 router.use(appRouter);
 
 export default router;
