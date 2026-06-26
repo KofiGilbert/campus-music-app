@@ -1,5 +1,7 @@
+import { createServer } from "node:http";
 import app from "./app";
 import { logger } from "./lib/logger";
+import { createSocketGateway } from "./realtime/socketGateway";
 import { seedTracks } from "./lib/seedTracks";
 import { seedArtists } from "./lib/seedArtists";
 
@@ -21,15 +23,16 @@ async function start(): Promise<void> {
   await seedArtists();
   await seedTracks();
 
+  // Wrap Express in an explicit HTTP server so socket.io can share the port.
+  const httpServer = createServer(app);
+  createSocketGateway(httpServer);
+
   await new Promise<void>((resolve, reject) => {
-    app.listen(port, (err) => {
-      if (err) {
-        reject(err);
-        return;
-      }
+    httpServer.listen(port, () => {
       logger.info({ port }, "Server listening");
       resolve();
     });
+    httpServer.on("error", reject);
   });
 }
 
