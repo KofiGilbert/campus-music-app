@@ -13,6 +13,7 @@ import { Flags } from "@/pages/Flags";
 import { Moderation } from "@/pages/Moderation";
 import { Tracks } from "@/pages/Tracks";
 import { Live } from "@/pages/Live";
+import { Shows } from "@/pages/Shows";
 import { Broadcast } from "@/pages/Broadcast";
 
 function AdminRoutes() {
@@ -25,6 +26,7 @@ function AdminRoutes() {
         <Route path="/moderation" component={Moderation} />
         <Route path="/tracks" component={Tracks} />
         <Route path="/live" component={Live} />
+        <Route path="/shows" component={Shows} />
         <Route path="/broadcast" component={Broadcast} />
         <Route component={NotFound} />
       </Switch>
