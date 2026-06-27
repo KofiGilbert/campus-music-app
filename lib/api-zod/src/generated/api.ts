@@ -1786,6 +1786,15 @@ export const ReorderPlaylistTracksResponse = zod.object({
 });
 
 /**
+ * @summary Report a post, track, comment, or user
+ */
+export const CreateFlagBody = zod.object({
+  targetType: zod.enum(["post", "track", "comment", "user"]),
+  targetId: zod.string(),
+  reason: zod.string().optional(),
+});
+
+/**
  * @summary List all known universities
  */
 export const GetUniversitiesResponseItem = zod.string();

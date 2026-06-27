@@ -2016,6 +2016,33 @@ paths:
               schema:
                 $ref: "#/components/schemas/OkResponse"
 
+  /flags:
+    post:
+      operationId: createFlag
+      tags: [moderation]
+      summary: Report a post, track, comment, or user
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateFlagBody"
+      responses:
+        "201":
+          description: Flag created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateFlagResponse"
+        "400":
+          description: Invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /universities:
     get:
       operationId: getUniversities
@@ -3705,6 +3732,31 @@ components:
             type: string
       required:
         - entryIds
+
+    CreateFlagBody:
+      type: object
+      properties:
+        targetType:
+          type: string
+          enum: [post, track, comment, user]
+        targetId:
+          type: string
+        reason:
+          type: string
+      required:
+        - targetType
+        - targetId
+
+    CreateFlagResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        ok:
+          type: boolean
+      required:
+        - id
+        - ok
 
     PublicProfile:
       type: object

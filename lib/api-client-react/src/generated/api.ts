@@ -31,6 +31,8 @@ import type {
   CreateCommentBody,
   CreateConversationBody,
   CreateEpisodeBody,
+  CreateFlagBody,
+  CreateFlagResponse,
   CreateLiveSessionBody,
   CreatePlaylistBody,
   CreatePodcastBody,
@@ -6505,6 +6507,85 @@ export const useReorderPlaylistTracks = <
   TContext
 > => {
   return useMutation(getReorderPlaylistTracksMutationOptions(options));
+};
+
+/**
+ * @summary Report a post, track, comment, or user
+ */
+export const getCreateFlagUrl = () => {
+  return `/api/flags`;
+};
+
+export const createFlag = async (
+  createFlagBody: CreateFlagBody,
+  options?: RequestInit,
+): Promise<CreateFlagResponse> => {
+  return customFetch<CreateFlagResponse>(getCreateFlagUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createFlagBody),
+  });
+};
+
+export const getCreateFlagMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createFlag>>,
+    TError,
+    { data: BodyType<CreateFlagBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createFlag>>,
+  TError,
+  { data: BodyType<CreateFlagBody> },
+  TContext
+> => {
+  const mutationKey = ["createFlag"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createFlag>>,
+    { data: BodyType<CreateFlagBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createFlag(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateFlagMutationResult = NonNullable<Awaited<ReturnType<typeof createFlag>>>;
+export type CreateFlagMutationBody = BodyType<CreateFlagBody>;
+export type CreateFlagMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Report a post, track, comment, or user
+ */
+export const useCreateFlag = <TError = ErrorType<ErrorResponse>, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createFlag>>,
+    TError,
+    { data: BodyType<CreateFlagBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createFlag>>,
+  TError,
+  { data: BodyType<CreateFlagBody> },
+  TContext
+> => {
+  return useMutation(getCreateFlagMutationOptions(options));
 };
 
 /**

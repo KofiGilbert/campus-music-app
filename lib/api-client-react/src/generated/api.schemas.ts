@@ -678,6 +678,27 @@ export interface ReorderPlaylistBody {
   entryIds: string[];
 }
 
+export type CreateFlagBodyTargetType =
+  (typeof CreateFlagBodyTargetType)[keyof typeof CreateFlagBodyTargetType];
+
+export const CreateFlagBodyTargetType = {
+  post: "post",
+  track: "track",
+  comment: "comment",
+  user: "user",
+} as const;
+
+export interface CreateFlagBody {
+  targetType: CreateFlagBodyTargetType;
+  targetId: string;
+  reason?: string;
+}
+
+export interface CreateFlagResponse {
+  id: string;
+  ok: boolean;
+}
+
 export type PublicProfileRole = (typeof PublicProfileRole)[keyof typeof PublicProfileRole];
 
 export const PublicProfileRole = {

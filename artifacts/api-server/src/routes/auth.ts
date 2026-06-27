@@ -160,6 +160,12 @@ router.post("/auth/login", authLimiter, async (req, res): Promise<void> => {
     return;
   }
 
+  // Banned accounts cannot authenticate.
+  if (user.bannedAt) {
+    res.status(403).json({ error: "This account has been suspended" });
+    return;
+  }
+
   const accessToken = await signToken({
     sub: user.id,
     role: user.role,
