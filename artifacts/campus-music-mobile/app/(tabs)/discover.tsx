@@ -24,7 +24,7 @@ import { resizeCoverUrl } from "@/utils/coverUrl";
 import { colorToBlurhash } from "@/utils/blurhash";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
-import { getForYou, getPodcasts, search as searchApi, useGetMostLikedTracks } from "@workspace/api-client-react";
+import { getForYou, getPodcasts, getShows, search as searchApi, useGetMostLikedTracks } from "@workspace/api-client-react";
 import { MusicCard } from "@/components/MusicCard";
 import { NowPlayingBar } from "@/components/NowPlayingBar";
 import { SectionHeader } from "@/components/SectionHeader";
@@ -363,6 +363,14 @@ export default function DiscoverScreen() {
     },
   }));
 
+  // Campus Music TV — live + upcoming shows.
+  const { data: showsData } = useQuery({
+    queryKey: ["shows", "discover"],
+    queryFn: () => getShows(),
+    staleTime: 60 * 1000,
+  });
+  const tvShows = (showsData?.items ?? []).filter((s) => s.status === "live" || s.status === "scheduled").slice(0, 8);
+
   const isSearchActive = query.trim().length > 0;
 
   const filtered = useMemo(() => {
@@ -648,6 +656,36 @@ export default function DiscoverScreen() {
               <CountryCard key={country.id} country={country} />
             ))}
           </ScrollView>
+
+          {/* Campus Music TV */}
+          {tvShows.length > 0 && (
+            <>
+              <SectionHeader title="Campus Music TV" />
+              <ScrollView
+                horizontal showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingHorizontal: 16, gap: 12 }}
+                style={{ marginBottom: 28 }}
+              >
+                {tvShows.map((s) => (
+                  <Pressable key={s.id} style={ds.freshCard} onPress={() => router.push(`/show/${s.id}`)}>
+                    <View style={[ds.freshArt, { backgroundColor: "#1a1a1a", alignItems: "center", justifyContent: "center" }]}>
+                      <Ionicons name={s.status === "live" ? "radio" : "tv-outline"} size={28} color="#fff" />
+                      {s.status === "live" && (
+                        <View style={{ position: "absolute", top: 8, right: 8, flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "rgba(0,0,0,0.6)", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: "#e0245e" }} />
+                          <Text style={{ color: "#fff", fontSize: 9, fontWeight: "700" }}>LIVE</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={[ds.freshTitle, { color: colors.foreground }]} numberOfLines={1}>{s.title}</Text>
+                    <Text style={[ds.freshArtist, { color: colors.mutedForeground }]} numberOfLines={1}>
+                      {s.status === "live" ? `${s.viewerCount} watching` : "Upcoming"}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </>
+          )}
 
           {/* Campus Podcasts */}
           <SectionHeader title="Campus Podcasts" onSeeAll={() => {}} />
