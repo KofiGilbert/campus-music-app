@@ -3,6 +3,7 @@ import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { attachSentryErrorHandler } from "./instrument";
 
 const app: Express = express();
 
@@ -53,6 +54,9 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
+
+// Sentry's error handler must come after routes and before our own handler.
+attachSentryErrorHandler(app);
 
 // Central error handler — consistent { error } shape. Express 5 forwards rejected
 // promises from async handlers here. Full error is logged; details are only

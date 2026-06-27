@@ -1,3 +1,4 @@
+import "./instrument"; // Sentry init — must be first.
 import { createServer } from "node:http";
 import app from "./app";
 import { logger } from "./lib/logger";
