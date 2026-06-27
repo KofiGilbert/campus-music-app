@@ -59,6 +59,7 @@ import type {
   GetNotificationsParams,
   GetPodcastEpisodesParams,
   GetPodcastsParams,
+  GetShowsParams,
   GetTracksParams,
   GetTrendingByDimensionParams,
   GetTrendingTracksParams,
@@ -106,6 +107,7 @@ import type {
   RefreshResponse,
   RegisterBody,
   RegisterPushTokenBody,
+  RemindResponse,
   ReorderPlaylistBody,
   ResetPasswordBody,
   ResetPasswordResponse,
@@ -117,8 +119,13 @@ import type {
   SearchUniversitiesParams,
   SendLiveChatBody,
   SendMessageBody,
+  SendShowChatBody,
   ShareBody,
   ShareResponse,
+  Show,
+  ShowChatMessage,
+  ShowChatResponse,
+  ShowsResponse,
   SkipBody,
   SkipResponse,
   SubscribeResponse,
@@ -133,6 +140,7 @@ import type {
   UploadUrlRequest,
   UploadUrlResponse,
   UserProfile,
+  ViewerCountResponse,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -6586,6 +6594,567 @@ export const useCreateFlag = <TError = ErrorType<ErrorResponse>, TContext = unkn
   TContext
 > => {
   return useMutation(getCreateFlagMutationOptions(options));
+};
+
+/**
+ * @summary Campus Music TV rail (live / upcoming / replays)
+ */
+export const getGetShowsUrl = (params?: GetShowsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/shows?${stringifiedParams}` : `/api/shows`;
+};
+
+export const getShows = async (
+  params?: GetShowsParams,
+  options?: RequestInit,
+): Promise<ShowsResponse> => {
+  return customFetch<ShowsResponse>(getGetShowsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetShowsQueryKey = (params?: GetShowsParams) => {
+  return [`/api/shows`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetShowsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getShows>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetShowsParams,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getShows>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetShowsQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getShows>>> = ({ signal }) =>
+    getShows(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getShows>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetShowsQueryResult = NonNullable<Awaited<ReturnType<typeof getShows>>>;
+export type GetShowsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Campus Music TV rail (live / upcoming / replays)
+ */
+
+export function useGetShows<
+  TData = Awaited<ReturnType<typeof getShows>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetShowsParams,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getShows>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetShowsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get a show
+ */
+export const getGetShowUrl = (id: string) => {
+  return `/api/shows/${id}`;
+};
+
+export const getShow = async (id: string, options?: RequestInit): Promise<Show> => {
+  return customFetch<Show>(getGetShowUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetShowQueryKey = (id: string) => {
+  return [`/api/shows/${id}`] as const;
+};
+
+export const getGetShowQueryOptions = <
+  TData = Awaited<ReturnType<typeof getShow>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getShow>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetShowQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getShow>>> = ({ signal }) =>
+    getShow(id, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, enabled: !!id, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getShow>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetShowQueryResult = NonNullable<Awaited<ReturnType<typeof getShow>>>;
+export type GetShowQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get a show
+ */
+
+export function useGetShow<
+  TData = Awaited<ReturnType<typeof getShow>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getShow>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetShowQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Set a reminder for a show
+ */
+export const getRemindShowUrl = (id: string) => {
+  return `/api/shows/${id}/remind-me`;
+};
+
+export const remindShow = async (id: string, options?: RequestInit): Promise<RemindResponse> => {
+  return customFetch<RemindResponse>(getRemindShowUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getRemindShowMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof remindShow>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof remindShow>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["remindShow"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<Awaited<ReturnType<typeof remindShow>>, { id: string }> = (
+    props,
+  ) => {
+    const { id } = props ?? {};
+
+    return remindShow(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RemindShowMutationResult = NonNullable<Awaited<ReturnType<typeof remindShow>>>;
+
+export type RemindShowMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Set a reminder for a show
+ */
+export const useRemindShow = <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof remindShow>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<Awaited<ReturnType<typeof remindShow>>, TError, { id: string }, TContext> => {
+  return useMutation(getRemindShowMutationOptions(options));
+};
+
+/**
+ * @summary Clear a reminder for a show
+ */
+export const getUnremindShowUrl = (id: string) => {
+  return `/api/shows/${id}/remind-me`;
+};
+
+export const unremindShow = async (id: string, options?: RequestInit): Promise<RemindResponse> => {
+  return customFetch<RemindResponse>(getUnremindShowUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getUnremindShowMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof unremindShow>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof unremindShow>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["unremindShow"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<Awaited<ReturnType<typeof unremindShow>>, { id: string }> = (
+    props,
+  ) => {
+    const { id } = props ?? {};
+
+    return unremindShow(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UnremindShowMutationResult = NonNullable<Awaited<ReturnType<typeof unremindShow>>>;
+
+export type UnremindShowMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Clear a reminder for a show
+ */
+export const useUnremindShow = <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof unremindShow>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof unremindShow>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getUnremindShowMutationOptions(options));
+};
+
+/**
+ * @summary Recent show chat
+ */
+export const getGetShowChatUrl = (id: string) => {
+  return `/api/shows/${id}/chat`;
+};
+
+export const getShowChat = async (id: string, options?: RequestInit): Promise<ShowChatResponse> => {
+  return customFetch<ShowChatResponse>(getGetShowChatUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetShowChatQueryKey = (id: string) => {
+  return [`/api/shows/${id}/chat`] as const;
+};
+
+export const getGetShowChatQueryOptions = <
+  TData = Awaited<ReturnType<typeof getShowChat>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getShowChat>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetShowChatQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getShowChat>>> = ({ signal }) =>
+    getShowChat(id, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, enabled: !!id, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getShowChat>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetShowChatQueryResult = NonNullable<Awaited<ReturnType<typeof getShowChat>>>;
+export type GetShowChatQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Recent show chat
+ */
+
+export function useGetShowChat<
+  TData = Awaited<ReturnType<typeof getShowChat>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getShowChat>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetShowChatQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Post a chat message (broadcast over the socket)
+ */
+export const getSendShowChatUrl = (id: string) => {
+  return `/api/shows/${id}/chat`;
+};
+
+export const sendShowChat = async (
+  id: string,
+  sendShowChatBody: SendShowChatBody,
+  options?: RequestInit,
+): Promise<ShowChatMessage> => {
+  return customFetch<ShowChatMessage>(getSendShowChatUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(sendShowChatBody),
+  });
+};
+
+export const getSendShowChatMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof sendShowChat>>,
+    TError,
+    { id: string; data: BodyType<SendShowChatBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof sendShowChat>>,
+  TError,
+  { id: string; data: BodyType<SendShowChatBody> },
+  TContext
+> => {
+  const mutationKey = ["sendShowChat"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof sendShowChat>>,
+    { id: string; data: BodyType<SendShowChatBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return sendShowChat(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SendShowChatMutationResult = NonNullable<Awaited<ReturnType<typeof sendShowChat>>>;
+export type SendShowChatMutationBody = BodyType<SendShowChatBody>;
+export type SendShowChatMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Post a chat message (broadcast over the socket)
+ */
+export const useSendShowChat = <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof sendShowChat>>,
+    TError,
+    { id: string; data: BodyType<SendShowChatBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof sendShowChat>>,
+  TError,
+  { id: string; data: BodyType<SendShowChatBody> },
+  TContext
+> => {
+  return useMutation(getSendShowChatMutationOptions(options));
+};
+
+/**
+ * @summary Register a viewer
+ */
+export const getJoinShowUrl = (id: string) => {
+  return `/api/shows/${id}/join`;
+};
+
+export const joinShow = async (id: string, options?: RequestInit): Promise<ViewerCountResponse> => {
+  return customFetch<ViewerCountResponse>(getJoinShowUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getJoinShowMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof joinShow>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<Awaited<ReturnType<typeof joinShow>>, TError, { id: string }, TContext> => {
+  const mutationKey = ["joinShow"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<Awaited<ReturnType<typeof joinShow>>, { id: string }> = (
+    props,
+  ) => {
+    const { id } = props ?? {};
+
+    return joinShow(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type JoinShowMutationResult = NonNullable<Awaited<ReturnType<typeof joinShow>>>;
+
+export type JoinShowMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Register a viewer
+ */
+export const useJoinShow = <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof joinShow>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<Awaited<ReturnType<typeof joinShow>>, TError, { id: string }, TContext> => {
+  return useMutation(getJoinShowMutationOptions(options));
+};
+
+/**
+ * @summary Drop a viewer
+ */
+export const getLeaveShowUrl = (id: string) => {
+  return `/api/shows/${id}/leave`;
+};
+
+export const leaveShow = async (
+  id: string,
+  options?: RequestInit,
+): Promise<ViewerCountResponse> => {
+  return customFetch<ViewerCountResponse>(getLeaveShowUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getLeaveShowMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof leaveShow>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<Awaited<ReturnType<typeof leaveShow>>, TError, { id: string }, TContext> => {
+  const mutationKey = ["leaveShow"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<Awaited<ReturnType<typeof leaveShow>>, { id: string }> = (
+    props,
+  ) => {
+    const { id } = props ?? {};
+
+    return leaveShow(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type LeaveShowMutationResult = NonNullable<Awaited<ReturnType<typeof leaveShow>>>;
+
+export type LeaveShowMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Drop a viewer
+ */
+export const useLeaveShow = <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof leaveShow>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<Awaited<ReturnType<typeof leaveShow>>, TError, { id: string }, TContext> => {
+  return useMutation(getLeaveShowMutationOptions(options));
 };
 
 /**
