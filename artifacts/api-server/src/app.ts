@@ -3,7 +3,7 @@ import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
-import { attachSentryErrorHandler } from "./instrument";
+import { captureException } from "./instrument";
 
 const app: Express = express();
 
@@ -55,14 +55,12 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
 
-// Sentry's error handler must come after routes and before our own handler.
-attachSentryErrorHandler(app);
-
 // Central error handler — consistent { error } shape. Express 5 forwards rejected
-// promises from async handlers here. Full error is logged; details are only
-// surfaced to clients outside production.
+// promises from async handlers here. Full error is logged + reported to Sentry;
+// details are only surfaced to clients outside production.
 app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
   logger.error({ err }, "Unhandled request error");
+  captureException(err);
   if (res.headersSent) return;
   const exposeDetail = process.env.NODE_ENV !== "production";
   res.status(500).json({
