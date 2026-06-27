@@ -8,6 +8,7 @@ const NAV = [
   { href: "/moderation", label: "Moderation" },
   { href: "/tracks", label: "Tracks" },
   { href: "/live", label: "Live" },
+  { href: "/shows", label: "Campus TV" },
   { href: "/broadcast", label: "Broadcast" },
 ];
 

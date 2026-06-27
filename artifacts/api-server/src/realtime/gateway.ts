@@ -33,3 +33,4 @@ export function realtime(): RealtimeGateway {
 export const userRoom = (userId: string): string => `user:${userId}`;
 export const conversationRoom = (conversationId: string): string => `conv:${conversationId}`;
 export const liveRoom = (sessionId: string): string => `live:${sessionId}`;
+export const tvRoom = (showId: string): string => `tv:${showId}`;

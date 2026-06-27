@@ -2043,6 +2043,166 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /shows:
+    get:
+      operationId: getShows
+      tags: [tv]
+      summary: Campus Music TV rail (live / upcoming / replays)
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [live, upcoming, replays]
+      responses:
+        "200":
+          description: Shows
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShowsResponse"
+
+  /shows/{id}:
+    get:
+      operationId: getShow
+      tags: [tv]
+      summary: Get a show
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Show
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Show"
+
+  /shows/{id}/remind-me:
+    post:
+      operationId: remindShow
+      tags: [tv]
+      summary: Set a reminder for a show
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Reminder state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RemindResponse"
+    delete:
+      operationId: unremindShow
+      tags: [tv]
+      summary: Clear a reminder for a show
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Reminder state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RemindResponse"
+
+  /shows/{id}/chat:
+    get:
+      operationId: getShowChat
+      tags: [tv]
+      summary: Recent show chat
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Chat
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShowChatResponse"
+    post:
+      operationId: sendShowChat
+      tags: [tv]
+      summary: Post a chat message (broadcast over the socket)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendShowChatBody"
+      responses:
+        "201":
+          description: Chat message
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShowChatMessage"
+
+  /shows/{id}/join:
+    post:
+      operationId: joinShow
+      tags: [tv]
+      summary: Register a viewer
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Viewer count
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ViewerCountResponse"
+
+  /shows/{id}/leave:
+    post:
+      operationId: leaveShow
+      tags: [tv]
+      summary: Drop a viewer
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Viewer count
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ViewerCountResponse"
+
   /universities:
     get:
       operationId: getUniversities
@@ -3757,6 +3917,147 @@ components:
       required:
         - id
         - ok
+
+    ShowHost:
+      type: object
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        name:
+          type: string
+        avatarUrl:
+          type: ["string", "null"]
+      required:
+        - id
+        - username
+        - name
+
+    Show:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        type:
+          type: string
+        status:
+          type: string
+          enum: [scheduled, live, ended, cancelled]
+        host:
+          oneOf:
+            - $ref: "#/components/schemas/ShowHost"
+            - type: "null"
+        featuredUserIds:
+          type: array
+          items:
+            type: string
+        scheduledAt:
+          type: ["string", "null"]
+        startedAt:
+          type: ["string", "null"]
+        endedAt:
+          type: ["string", "null"]
+        playbackUrl:
+          type: ["string", "null"]
+        vodUrl:
+          type: ["string", "null"]
+        thumbnailUrl:
+          type: ["string", "null"]
+        viewerCount:
+          type: integer
+        peakViewerCount:
+          type: integer
+        chatEnabled:
+          type: boolean
+        category:
+          type: ["string", "null"]
+        tags:
+          type: array
+          items:
+            type: string
+        isReminded:
+          type: ["boolean", "null"]
+      required:
+        - id
+        - title
+        - description
+        - type
+        - status
+        - viewerCount
+        - peakViewerCount
+        - chatEnabled
+
+    ShowsResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Show"
+      required:
+        - items
+
+    ShowChatMessage:
+      type: object
+      properties:
+        id:
+          type: string
+        showId:
+          type: string
+        userId:
+          type: string
+        displayName:
+          type: string
+        message:
+          type: string
+        type:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - showId
+        - message
+        - createdAt
+
+    ShowChatResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ShowChatMessage"
+      required:
+        - items
+
+    SendShowChatBody:
+      type: object
+      properties:
+        message:
+          type: string
+      required:
+        - message
+
+    RemindResponse:
+      type: object
+      properties:
+        reminded:
+          type: boolean
+      required:
+        - reminded
+
+    ViewerCountResponse:
+      type: object
+      properties:
+        viewerCount:
+          type: integer
+      required:
+        - viewerCount
 
     PublicProfile:
       type: object

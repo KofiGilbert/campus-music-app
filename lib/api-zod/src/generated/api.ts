@@ -1795,6 +1795,164 @@ export const CreateFlagBody = zod.object({
 });
 
 /**
+ * @summary Campus Music TV rail (live / upcoming / replays)
+ */
+export const GetShowsQueryParams = zod.object({
+  status: zod.enum(["live", "upcoming", "replays"]).optional(),
+});
+
+export const GetShowsResponse = zod.object({
+  items: zod.array(
+    zod.object({
+      id: zod.string(),
+      title: zod.string(),
+      description: zod.string(),
+      type: zod.string(),
+      status: zod.enum(["scheduled", "live", "ended", "cancelled"]),
+      host: zod
+        .union([
+          zod.object({
+            id: zod.string(),
+            username: zod.string(),
+            name: zod.string(),
+            avatarUrl: zod.string().nullish(),
+          }),
+          zod.null(),
+        ])
+        .optional(),
+      featuredUserIds: zod.array(zod.string()).optional(),
+      scheduledAt: zod.string().nullish(),
+      startedAt: zod.string().nullish(),
+      endedAt: zod.string().nullish(),
+      playbackUrl: zod.string().nullish(),
+      vodUrl: zod.string().nullish(),
+      thumbnailUrl: zod.string().nullish(),
+      viewerCount: zod.number(),
+      peakViewerCount: zod.number(),
+      chatEnabled: zod.boolean(),
+      category: zod.string().nullish(),
+      tags: zod.array(zod.string()).optional(),
+      isReminded: zod.boolean().nullish(),
+    }),
+  ),
+});
+
+/**
+ * @summary Get a show
+ */
+export const GetShowParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetShowResponse = zod.object({
+  id: zod.string(),
+  title: zod.string(),
+  description: zod.string(),
+  type: zod.string(),
+  status: zod.enum(["scheduled", "live", "ended", "cancelled"]),
+  host: zod
+    .union([
+      zod.object({
+        id: zod.string(),
+        username: zod.string(),
+        name: zod.string(),
+        avatarUrl: zod.string().nullish(),
+      }),
+      zod.null(),
+    ])
+    .optional(),
+  featuredUserIds: zod.array(zod.string()).optional(),
+  scheduledAt: zod.string().nullish(),
+  startedAt: zod.string().nullish(),
+  endedAt: zod.string().nullish(),
+  playbackUrl: zod.string().nullish(),
+  vodUrl: zod.string().nullish(),
+  thumbnailUrl: zod.string().nullish(),
+  viewerCount: zod.number(),
+  peakViewerCount: zod.number(),
+  chatEnabled: zod.boolean(),
+  category: zod.string().nullish(),
+  tags: zod.array(zod.string()).optional(),
+  isReminded: zod.boolean().nullish(),
+});
+
+/**
+ * @summary Set a reminder for a show
+ */
+export const RemindShowParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const RemindShowResponse = zod.object({
+  reminded: zod.boolean(),
+});
+
+/**
+ * @summary Clear a reminder for a show
+ */
+export const UnremindShowParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UnremindShowResponse = zod.object({
+  reminded: zod.boolean(),
+});
+
+/**
+ * @summary Recent show chat
+ */
+export const GetShowChatParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetShowChatResponse = zod.object({
+  items: zod.array(
+    zod.object({
+      id: zod.string(),
+      showId: zod.string(),
+      userId: zod.string().optional(),
+      displayName: zod.string().optional(),
+      message: zod.string(),
+      type: zod.string().optional(),
+      createdAt: zod.string(),
+    }),
+  ),
+});
+
+/**
+ * @summary Post a chat message (broadcast over the socket)
+ */
+export const SendShowChatParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const SendShowChatBody = zod.object({
+  message: zod.string(),
+});
+
+/**
+ * @summary Register a viewer
+ */
+export const JoinShowParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const JoinShowResponse = zod.object({
+  viewerCount: zod.number(),
+});
+
+/**
+ * @summary Drop a viewer
+ */
+export const LeaveShowParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const LeaveShowResponse = zod.object({
+  viewerCount: zod.number(),
+});
+
+/**
  * @summary List all known universities
  */
 export const GetUniversitiesResponseItem = zod.string();

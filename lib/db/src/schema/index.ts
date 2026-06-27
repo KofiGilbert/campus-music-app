@@ -47,3 +47,6 @@ export * from "./podcastSubscriptions";
 export * from "./playlists";
 export * from "./playlistTracks";
 export * from "./flags";
+export * from "./shows";
+export * from "./showChatMessages";
+export * from "./showReminders";

@@ -699,6 +699,83 @@ export interface CreateFlagResponse {
   ok: boolean;
 }
 
+export interface ShowHost {
+  id: string;
+  username: string;
+  name: string;
+  /** @nullable */
+  avatarUrl?: string | null;
+}
+
+export type ShowStatus = (typeof ShowStatus)[keyof typeof ShowStatus];
+
+export const ShowStatus = {
+  scheduled: "scheduled",
+  live: "live",
+  ended: "ended",
+  cancelled: "cancelled",
+} as const;
+
+export interface Show {
+  id: string;
+  title: string;
+  description: string;
+  type: string;
+  status: ShowStatus;
+  host?: ShowHost | null;
+  featuredUserIds?: string[];
+  /** @nullable */
+  scheduledAt?: string | null;
+  /** @nullable */
+  startedAt?: string | null;
+  /** @nullable */
+  endedAt?: string | null;
+  /** @nullable */
+  playbackUrl?: string | null;
+  /** @nullable */
+  vodUrl?: string | null;
+  /** @nullable */
+  thumbnailUrl?: string | null;
+  viewerCount: number;
+  peakViewerCount: number;
+  chatEnabled: boolean;
+  /** @nullable */
+  category?: string | null;
+  tags?: string[];
+  /** @nullable */
+  isReminded?: boolean | null;
+}
+
+export interface ShowsResponse {
+  items: Show[];
+}
+
+export interface ShowChatMessage {
+  id: string;
+  showId: string;
+  userId?: string;
+  displayName?: string;
+  message: string;
+  type?: string;
+  createdAt: string;
+}
+
+export interface ShowChatResponse {
+  items: ShowChatMessage[];
+}
+
+export interface SendShowChatBody {
+  message: string;
+}
+
+export interface RemindResponse {
+  reminded: boolean;
+}
+
+export interface ViewerCountResponse {
+  viewerCount: number;
+}
+
 export type PublicProfileRole = (typeof PublicProfileRole)[keyof typeof PublicProfileRole];
 
 export const PublicProfileRole = {
@@ -1031,6 +1108,18 @@ export type GetPodcastsParams = {
 export type GetPodcastEpisodesParams = {
   cursor?: string;
 };
+
+export type GetShowsParams = {
+  status?: GetShowsStatus;
+};
+
+export type GetShowsStatus = (typeof GetShowsStatus)[keyof typeof GetShowsStatus];
+
+export const GetShowsStatus = {
+  live: "live",
+  upcoming: "upcoming",
+  replays: "replays",
+} as const;
 
 export type SearchUniversitiesParams = {
   /**

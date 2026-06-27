@@ -21,6 +21,7 @@ import discoveryRouter from "./discovery";
 import podcastsRouter from "./podcasts";
 import playlistsRouter from "./playlists";
 import adminRouter from "./admin";
+import showsRouter from "./shows";
 
 const router: IRouter = Router();
 
@@ -45,6 +46,7 @@ router.use(discoveryRouter);
 router.use(podcastsRouter);
 router.use(playlistsRouter);
 router.use(adminRouter);
+router.use(showsRouter);
 router.use(appRouter);
 
 export default router;
