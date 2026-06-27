@@ -14,8 +14,12 @@ import { PlayerProvider } from "@/context/PlayerContext";
 import { RegistrationProvider } from "@/context/RegistrationContext";
 import { SocketProvider } from "@/context/SocketContext";
 import { PushRegistrar } from "@/components/PushRegistrar";
+import { initObservability, track } from "@/lib/observability";
 
 SplashScreen.preventAutoHideAsync();
+// Crash reporting + analytics (no-op without env keys). Init before first render.
+initObservability();
+track("app_open");
 
 const queryClient = new QueryClient();
 

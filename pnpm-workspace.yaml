@@ -165,6 +165,9 @@ overrides:
 # CI install errors with ERR_PNPM_IGNORED_BUILDS otherwise). Mirror the same
 # trusted set so CI's `pnpm install` is allowed to run their build scripts.
 allowBuilds:
+  # Sentry CLI's postinstall only fetches its binary for source-map upload at
+  # EAS/CI build time; not needed for typecheck/test, so don't run it locally.
+  "@sentry/cli": false
   "@swc/core": true
   esbuild: true
   msw: true

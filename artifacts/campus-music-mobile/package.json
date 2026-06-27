@@ -61,6 +61,7 @@
   },
   "dependencies": {
     "@react-native-community/netinfo": "^12.0.0",
+    "@sentry/react-native": "~6.14.0",
     "@react-navigation/bottom-tabs": "7.15.12",
     "expo-av": "^16.0.8",
     "expo-document-picker": "^14.0.8",
