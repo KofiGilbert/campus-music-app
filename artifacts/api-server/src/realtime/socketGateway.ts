@@ -7,6 +7,7 @@ import { logger } from "../lib/logger";
 import {
   conversationRoom,
   liveRoom,
+  tvRoom,
   type RealtimeGateway,
   setRealtimeGateway,
   userRoom,
@@ -70,6 +71,14 @@ function registerHandlers(socket: Socket): void {
   });
   socket.on("live:leave", (sessionId: unknown) => {
     if (typeof sessionId === "string") void socket.leave(liveRoom(sessionId));
+  });
+
+  // Campus Music TV show rooms (public — chat + viewer count + presenter cues).
+  socket.on("tv:join", (showId: unknown) => {
+    if (typeof showId === "string") void socket.join(tvRoom(showId));
+  });
+  socket.on("tv:leave", (showId: unknown) => {
+    if (typeof showId === "string") void socket.leave(tvRoom(showId));
   });
 }
 
