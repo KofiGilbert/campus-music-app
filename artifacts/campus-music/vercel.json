@@ -1,0 +1,8 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "buildCommand": "cd ../.. && corepack pnpm@11.9.0 install --frozen-lockfile && corepack pnpm@11.9.0 --filter @workspace/campus-music run build",
+  "outputDirectory": "dist",
+  "installCommand": "echo skip",
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+}
