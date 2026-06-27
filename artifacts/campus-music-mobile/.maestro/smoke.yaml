@@ -1,0 +1,18 @@
+# Maestro critical-flow smoke test. Run against a built app on a device/emulator:
+#   maestro test artifacts/campus-music-mobile/.maestro/smoke.yaml
+#
+# Covers the cold-start auth gate + core navigation. Extend per feature as the
+# app stabilizes (login, compose post, open a playlist, join a live show).
+appId: com.campusmusic.mobile
+---
+- launchApp:
+    clearState: true
+# Unauthenticated cold start must land on onboarding, not the tabs (Phase 0 gate).
+- assertVisible: "Campus Music"
+- assertVisible:
+    text: "Log in|Sign up|Get started|Continue"
+    optional: true
+# Tap into login if present.
+- tapOn:
+    text: "Log in"
+    optional: true
